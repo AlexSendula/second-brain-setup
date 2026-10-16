@@ -1,0 +1,46 @@
+# Tests for the kit, on macOS and Windows. Written for the public repository,
+# where the kit's root is the repository root.
+#
+# The release-to-release update test is not here yet. Add it once a first
+# release exists.
+#
+# The Windows branch of link_dir in install.py (the junction) first runs here,
+# on the first push to GitHub.
+
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+      - name: Run the tests
+        shell: bash
+        run: uv run --python 3.14 --with pyyaml python -m unittest discover -s tests -v
+
+  online:
+    runs-on: macos-latest
+    env:
+      KIT_ONLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+      - name: Run the tests, including the online download
+        shell: bash
+        run: uv run --python 3.14 --with pyyaml python -m unittest discover -s tests -v
