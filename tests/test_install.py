@@ -448,13 +448,13 @@ class DashboardTests(unittest.TestCase):
 
     def test_pinned_dashboards_come_from_the_ninja_board_release(self):
         entry = install.load_pins()[DASHBOARD_ID]
-        self.assertEqual(entry["version"], "1.0.0")
+        self.assertEqual(entry["version"], "1.0.2")
         self.assertFalse(entry["in_directory"])
         self.assertEqual(entry["install_to"], "01 Dashboard")
         self.assertEqual(sorted(entry["files"]), sorted(DASHBOARD_NAMES))
         for name, pin in entry["files"].items():
             with self.subTest(note=name):
-                url = "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/"
+                url = "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/"
                 self.assertEqual(pin["url"], url + name.replace(" ", "%20"))
                 self.assertRegex(pin["sha256"], r"^[0-9a-f]{64}$")
 
@@ -530,7 +530,7 @@ class SavedVersionTests(unittest.TestCase):
 
     def test_first_saved_version(self):
         do_install(self.vault, ["claude-code"])
-        self.assertEqual(git_run(self.vault, "log", "--format=%s").stdout, "Installed by second-brain-setup 0.1.0\n")
+        self.assertEqual(git_run(self.vault, "log", "--format=%s").stdout, f"Installed by second-brain-setup {install.kit_version()}\n")
         self.assertEqual(git_run(self.vault, "status", "--porcelain").stdout, "")
         self.assertTrue((self.vault / ".memory" / "MEMORY.md").is_file())
         self.assertEqual(git_run(self.vault, "ls-files", ".memory").stdout, "")

@@ -113,7 +113,7 @@ class InstalledVaultTests(unittest.TestCase):
         self.assertEqual(meta["type"], "config")
         self.assertEqual(meta["created"], TODAY)
         self.assertEqual(meta["agent_tools"], ["claude-code", "codex"])
-        self.assertEqual(meta["system_version"], "0.1.0")
+        self.assertEqual(meta["system_version"], install.kit_version())
         self.assertEqual(meta["update_source"], "https://github.com/AlexSendula/second-brain-setup")
         self.assertEqual(meta["format_version"], 1)
 

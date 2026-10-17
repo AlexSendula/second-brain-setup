@@ -18,46 +18,46 @@
     }
   },
   "ninja-board": {
-    "version": "1.0.0",
+    "version": "1.0.2",
     "in_directory": false,
     "files": {
       "main.js": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.0/main.js",
-        "sha256": "b25f67ee41ebd6d80476c869081003eec7998fb3c9a02ec738434a937bbf72fe"
+        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/main.js",
+        "sha256": "a7475ef39571db6205127431c58e5f4c9ab3dd9dc2085021d42a0b29b5e9671b"
       },
       "manifest.json": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.0/manifest.json",
-        "sha256": "fdd210bc27d3149d899026e2ffc7862679c70fed46c471d7f699f9c00ec49044"
+        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/manifest.json",
+        "sha256": "ec10981424f2840109b0253c625f221fe61f213318dc59748a1053be83d60e77"
       },
       "styles.css": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.0/styles.css",
-        "sha256": "ae6cb79317c9ab6de8720882e41a071e59f7289bb6bc8b81964d634c094b3579"
+        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/styles.css",
+        "sha256": "cb97dbfe7f2330bbbbec2c313013263ccc152c058b34417470275e8e5208bae3"
       }
     }
   },
   "ninja-board-dashboards": {
-    "version": "1.0.0",
+    "version": "1.0.2",
     "in_directory": false,
     "install_to": "01 Dashboard",
     "files": {
       "01 Today.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/01%20Today.md",
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/01%20Today.md",
         "sha256": "76c1e4bca922bf54b3ec603743d2a131178b2188525430d2ed12278cfa97f0db"
       },
       "02 Week.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/02%20Week.md",
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/02%20Week.md",
         "sha256": "334f8ed16ed9a73ceee4fcca080135aa712efdee0d28b42ec63670c01c0ab7b6"
       },
       "03 Projects.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/03%20Projects.md",
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/03%20Projects.md",
         "sha256": "b304e0f8e30136dd9584254b5fec32529173e15b1a8080c88267d062a22c3343"
       },
       "04 Backlog.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/04%20Backlog.md",
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/04%20Backlog.md",
         "sha256": "190e41246afe1e0ee089f92db3f81add7d29e4c7fb64ec50fbd8b06a6dec526b"
       },
       "05 Guide.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.0/sample-vault/01%20Dashboard/05%20Guide.md",
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/05%20Guide.md",
         "sha256": "cb55747419154ec8d849ae36811523bea73b44af9f6b0c25b6c646f49d26187e"
       }
     }

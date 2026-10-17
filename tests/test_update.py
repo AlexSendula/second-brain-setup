@@ -20,6 +20,7 @@ from test_install import TODAY, git_run, isolate_git
 
 AGENTS = "AGENTS.md"
 CONFIG = "99 System/config.md"
+V = install.kit_version()
 WEEK = "01 Dashboard/02 Week.md"
 BACKLOG = "01 Dashboard/04 Backlog.md"
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
@@ -156,7 +157,7 @@ class ReplaceTests(UpdateTestCase):
         self.new_kit_version()
         code, out, err = run_cli("update", str(self.vault))
         self.assertEqual(code, 0, err)
-        self.assertEqual(out, "version  99 System/config.md  0.1.0 → 0.2.0\nmigration: none\n")
+        self.assertEqual(out, f"version  99 System/config.md  {V} → 0.2.0\nmigration: none\n")
 
     def test_kept_aside_names_count_up(self):
         self.install_vault()
@@ -203,13 +204,13 @@ class ConfigAndDashboardTests(UpdateTestCase):
         self.new_kit_version()
         code, out, err = run_cli("update", str(self.vault))
         self.assertEqual(code, 0, err)
-        self.assertIn("version  99 System/config.md  0.1.0 → 0.2.0\n", out)
+        self.assertIn(f"version  99 System/config.md  {V} → 0.2.0\n", out)
         self.assertIn("arrange: today, week", week.read_text(encoding="utf-8"))
         for path, data in dashboards.items():
             with self.subTest(dashboard=path.name):
                 self.assertEqual(path.read_bytes(), data)
         self.assertEqual(config.read_bytes(),
-                         config_before.replace(b'system_version: "0.1.0"', b'system_version: "0.2.0"'))
+                         config_before.replace(f'system_version: "{V}"'.encode(), b'system_version: "0.2.0"'))
 
     def test_crlf_config_is_read_and_only_its_two_lines_change(self):
         self.install_vault(("codex",))
@@ -220,7 +221,7 @@ class ConfigAndDashboardTests(UpdateTestCase):
         code, out, err = run_cli("update", str(self.vault), "--tools", "claude-code")
         self.assertEqual(code, 0, err)
         self.assertEqual(config.read_bytes(), before
-                         .replace(b'system_version: "0.1.0"', b'system_version: "0.2.0"')
+                         .replace(f'system_version: "{V}"'.encode(), b'system_version: "0.2.0"')
                          .replace(b"agent_tools: [codex]", b"agent_tools: [codex, claude-code]"))
         self.assertEqual(agent_tools(self.vault), ["codex", "claude-code"])
 
@@ -297,7 +298,7 @@ class ToolTests(UpdateTestCase):
         self.assertEqual(err, f"install.py: {CONFIG}: agent_tools names an unknown tool '../../x' "
                               "(choose from claude-code, codex, vscode)\n")
         self.assertEqual(snapshot(self.vault), before)
-        self.assertEqual(subjects(self.vault), ["Installed by second-brain-setup 0.1.0"])
+        self.assertEqual(subjects(self.vault), [f"Installed by second-brain-setup {V}"])
 
 
 class SavedVersionTests(UpdateTestCase):
@@ -311,7 +312,7 @@ class SavedVersionTests(UpdateTestCase):
         self.assertEqual(subjects(self.vault), [
             "Updated to second-brain-setup 0.2.0",
             "Saved before update to 0.2.0",
-            "Installed by second-brain-setup 0.1.0",
+            f"Installed by second-brain-setup {V}",
         ])
         self.assertEqual(git_run(self.vault, "status", "--porcelain").stdout, "")
 
@@ -322,7 +323,7 @@ class SavedVersionTests(UpdateTestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(subjects(self.vault), [
             "Updated to second-brain-setup 0.2.0",
-            "Installed by second-brain-setup 0.1.0",
+            f"Installed by second-brain-setup {V}",
         ])
 
     def test_already_up_to_date_writes_nothing(self):
@@ -332,7 +333,7 @@ class SavedVersionTests(UpdateTestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(out, "already up to date\nmigration: none\n")
         self.assertEqual(snapshot(self.vault), before)
-        self.assertEqual(subjects(self.vault), ["Installed by second-brain-setup 0.1.0"])
+        self.assertEqual(subjects(self.vault), [f"Installed by second-brain-setup {V}"])
 
     def test_refuses_a_vault_without_its_own_git_repository(self):
         self.install_vault(("codex",))

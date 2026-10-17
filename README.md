@@ -2,7 +2,7 @@
 
 Second Brain Setup gives you a second brain on your computer: an Obsidian vault of plain notes for your tasks, projects, people and plans, kept with your AI agent. You say one sentence to your agent, and it does the setup.
 
-This is an early version (0.1.0). It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
+This is an early version (0.1.1). It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
 
 ## Install
 
@@ -32,7 +32,7 @@ Before it downloads anything, your agent names each item and waits for your yes.
 
 - **The vault:** a new folder, `~/Documents/second-brain` by default, with the folders from `01 Dashboard` to `99 System`. If iCloud or OneDrive syncs your Documents folder, the agent suggests `~/second-brain` instead, since sync and git don't mix well.
 - **What your agent follows:** `AGENTS.md`, the rules and settings in `99 System/`, and two agent skills, `brain-setup` and `brain`. Claude Code and VS Code get their own files, such as `CLAUDE.md` for Claude Code. Codex gets none.
-- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) 8.5.0, already set up, and [Ninja Board](https://github.com/AlexSendula/ninja-board) 1.0.0 with its five boards. After Obsidian's first restart, it opens on Today.
+- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) 8.5.0, already set up, and [Ninja Board](https://github.com/AlexSendula/ninja-board) 1.0.2 with its five boards. After Obsidian's first restart, it opens on Today.
 - **Python 3.14**, which uv downloads into its own folder the first time.
 - **A git repository** in the vault, with a first saved version.
 

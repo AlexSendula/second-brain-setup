@@ -66,7 +66,7 @@ Get the newest release of the kit. Never use the `main` branch.
 2. Before anything is downloaded, ask the person **Install now?** Name what the install fetches:
    - the kit, release `<tag>`, from https://github.com/AlexSendula/second-brain-setup
    - the Tasks plugin 8.5.0, from https://github.com/obsidian-tasks-group/obsidian-tasks
-   - Ninja Board 1.0.0, from https://github.com/AlexSendula/ninja-board (its five dashboard notes come from the same release)
+   - Ninja Board 1.0.2, from https://github.com/AlexSendula/ninja-board (its five dashboard notes come from the same release)
    - Python 3.14, which uv downloads into its own folder the first time it needs it
 
    Go on only on a yes. If the answer is no, say what is still missing, and stop.
