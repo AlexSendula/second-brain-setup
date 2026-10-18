@@ -2,7 +2,7 @@
 
 Second Brain Setup gives you a second brain on your computer: an Obsidian vault of plain notes for your tasks, projects, people and plans, kept with your AI agent. You say one sentence to your agent, and it does the setup.
 
-This is version 1.0.0. It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
+This is version 1.0.1. It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
 
 ## Install
 

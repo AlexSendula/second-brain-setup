@@ -353,7 +353,11 @@ class ObsidianSetupTests(unittest.TestCase):
         do_install(target, ["claude-code"])
         obsidian = target / ".obsidian"
         app = json.loads((obsidian / "app.json").read_text(encoding="utf-8"))
-        self.assertEqual(app, {"openBehavior": "file:01 Dashboard/01 Today.md", "userIgnoreFilters": ["AGENTS.md"]})
+        self.assertEqual(app, {
+            "openBehavior": "file:01 Dashboard/01 Today.md",
+            "readableLineLength": False,  # the boards use the full width of the pane
+            "userIgnoreFilters": ["AGENTS.md"],
+        })
         community = json.loads((obsidian / "community-plugins.json").read_text(encoding="utf-8"))
         self.assertEqual(community, ["obsidian-tasks-plugin", "ninja-board"])  # listed, and installed by Obsidian
         core = json.loads((obsidian / "core-plugins.json").read_text(encoding="utf-8"))
