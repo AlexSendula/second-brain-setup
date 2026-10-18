@@ -2,7 +2,7 @@
 
 Second Brain Setup gives you a second brain on your computer: an Obsidian vault of plain notes for your tasks, projects, people and plans, kept with your AI agent. You say one sentence to your agent, and it does the setup.
 
-This is an early version (0.1.1). It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
+This is version 1.0.0. It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
 
 ## Install
 
@@ -12,7 +12,7 @@ Ask your agent:
 Install this second brain for me: https://github.com/AlexSendula/second-brain-setup
 ```
 
-Your agent follows [SETUP.md](SETUP.md). It checks what you have, asks where the vault should go and which agent tools you use. At the end it opens Obsidian, and you choose the vault folder and trust its plugins.
+Your agent follows [SETUP.md](SETUP.md). It checks what you have, asks where the vault should go and which agent tools you use. At the end it opens Obsidian. You choose the vault folder, then install the two plugins from Obsidian, or let your agent do it through Obsidian's command line interface.
 
 From then on, start your agent in the vault folder.
 
@@ -20,7 +20,7 @@ From then on, start your agent in the vault folder.
 
 - git 2.28 or newer
 - uv 0.9.0 or newer
-- Obsidian 1.10.2 or newer
+- Obsidian 1.10.2 or newer (1.12.4 or newer if your agent should install the plugins for you)
 - One agent tool: Claude Code, Codex, or VS Code with GitHub Copilot
 - macOS or Windows. Linux is not tested.
 
@@ -31,8 +31,9 @@ Your agent can install git and uv for you after a yes, and Obsidian too on Windo
 Before it downloads anything, your agent names each item and waits for your yes.
 
 - **The vault:** a new folder, `~/Documents/second-brain` by default, with the folders from `01 Dashboard` to `99 System`. If iCloud or OneDrive syncs your Documents folder, the agent suggests `~/second-brain` instead, since sync and git don't mix well.
-- **What your agent follows:** `AGENTS.md`, the rules and settings in `99 System/`, and two agent skills, `brain-setup` and `brain`. Claude Code and VS Code get their own files, such as `CLAUDE.md` for Claude Code. Codex gets none.
-- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) 8.5.0, already set up, and [Ninja Board](https://github.com/AlexSendula/ninja-board) 1.0.2 with its five boards. After Obsidian's first restart, it opens on Today.
+- **What your agent follows:** `AGENTS.md`, the rules and settings in `99 System/`, and two agent skills, `brain-setup` and `brain`. Claude Code and VS Code get their own files, such as `.claude/CLAUDE.md` for Claude Code. Codex gets none.
+- **Agent files out of sight:** in Obsidian, `AGENTS.md` is hidden from the file list by a CSS snippet, `hide-agent-files`. To show it again, turn the snippet off under Settings → Appearance → CSS snippets.
+- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) and [Ninja Board](https://github.com/AlexSendula/ninja-board) come from Obsidian's community plugins, and Obsidian updates them. The kit sets up Tasks' settings and adds Ninja Board's five boards (dashboard notes), from Ninja Board 1.0.2. After you install the plugins and restart Obsidian once, it opens on Today.
 - **Python 3.14**, which uv downloads into its own folder the first time.
 - **A git repository** in the vault, with a first saved version.
 
@@ -56,6 +57,7 @@ update my brain
 It finds the newest release, tells you where it comes from, shows what would change, and applies it only after your yes.
 
 - An update never changes your notes or your rules.
+- An update never installs or updates plugins. Obsidian does that: Settings → Community plugins → Check for updates.
 - A system file you edited, such as `AGENTS.md`, is kept beside the new one as `<file>.mine`.
 - The update saves a version before and after. To undo it, run this in the vault:
 
@@ -68,7 +70,7 @@ To add another agent tool later, ask your agent to add it.
 ## For developers
 
 - [SETUP.md](SETUP.md) is what the agent reads. [install.py](install.py) does the work: `install` creates a vault, and `update` updates one.
-- [template/](template/) holds the vault's files, [skills/](skills/) the agent skills, and [pins.json](pins.json) the plugin versions and their checksums.
+- [template/](template/) holds the vault's files, [skills/](skills/) the agent skills, and [pins.json](pins.json) the release and checksums of Ninja Board's dashboard notes.
 
 Run the tests (you need uv):
 
@@ -76,7 +78,7 @@ Run the tests (you need uv):
 uv run --python 3.14 --with pyyaml python -m unittest discover -s tests -v
 ```
 
-Set `KIT_ONLINE=1` to include the test that downloads the plugins from GitHub. CI runs the tests on macOS and Windows.
+Set `KIT_ONLINE=1` to include the test that downloads the dashboard notes from GitHub. CI runs the tests on macOS and Windows. To install or update without the network, `--pinned-from <folder>` reads the pinned notes from a local folder laid out as `<id>/<file>`.
 
 ## Part of Second Brain
 

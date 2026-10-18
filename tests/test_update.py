@@ -1,4 +1,4 @@
-"""Tests for update: dry run, replace and keep aside, dashboards, config, tools, plugins, saved versions."""
+"""Tests for update: dry run, replace and keep aside, dashboards, config, tools, the move from 0.1.x, saved versions."""
 
 import contextlib
 import hashlib
@@ -15,10 +15,12 @@ from unittest import mock
 import yaml
 
 import install
-from helpers import DASHBOARD_ID, fake_plugins
+from helpers import DASHBOARD_ID, fake_pins
 from test_install import TODAY, git_run, isolate_git
 
 AGENTS = "AGENTS.md"
+CLAUDE = ".claude/CLAUDE.md"
+OLD_CLAUDE = b"@AGENTS.md\n@.memory/MEMORY.md\n"  # the root CLAUDE.md that kit 0.1.x wrote
 CONFIG = "99 System/config.md"
 V = install.kit_version()
 WEEK = "01 Dashboard/02 Week.md"
@@ -56,6 +58,10 @@ def crlf(data: bytes) -> bytes:
     return data.replace(b"\n", b"\r\n")
 
 
+def set_version(config: str, version: str) -> str:
+    return install.set_frontmatter_line(config, "system_version", f'"{version}"')
+
+
 class UpdateTestCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -63,11 +69,11 @@ class UpdateTestCase(unittest.TestCase):
         self.tmp = Path(tmp.name)
         isolate_git(self, self.tmp)
         self.vault = self.tmp / "v"
-        self.pins, self.folder = fake_plugins(self.tmp)
+        self.pins, self.folder = fake_pins(self.tmp)
         self.patch(install, "load_pins", lambda: self.pins)  # update reads the pins: keep every test offline
 
     def install_vault(self, tools=("claude-code", "codex")):
-        install.install(self.vault, list(tools), plugins_from=self.folder, pins=self.pins, today=TODAY)
+        install.install(self.vault, list(tools), pinned_from=self.folder, pins=self.pins, today=TODAY)
 
     def expected_note(self, name: str) -> bytes:
         """The pinned fake dashboard, with its created line set to today: what update writes for a missing note."""
@@ -228,12 +234,12 @@ class ConfigAndDashboardTests(UpdateTestCase):
     def test_missing_dashboard_is_added_not_rewritten(self):
         self.install_vault()
         (self.vault / BACKLOG).unlink()
-        code, out, err = run_cli("update", str(self.vault), "--plugins-from", str(self.folder))
+        code, out, err = run_cli("update", str(self.vault), "--pinned-from", str(self.folder))
         self.assertEqual(code, 0, err)
         self.assertIn("dashboard  01 Dashboard/04 Backlog.md\n", out)
         self.assertEqual((self.vault / BACKLOG).read_bytes(), self.expected_note("04 Backlog.md"))
 
-    def test_missing_dashboard_is_downloaded_from_its_pin_without_plugins_from(self):
+    def test_missing_dashboard_is_downloaded_from_its_pin_without_pinned_from(self):
         self.install_vault()
         (self.vault / BACKLOG).unlink()
         fixtures = {pin["url"]: (self.folder / DASHBOARD_ID / name).read_bytes()
@@ -258,19 +264,22 @@ class ConfigAndDashboardTests(UpdateTestCase):
         (self.vault / BACKLOG).unlink()
         (self.folder / DASHBOARD_ID / "02 Week.md").write_bytes(b"corrupted\n")
         before = files_outside_git(self.vault)
-        code, out, err = run_cli("update", str(self.vault), "--plugins-from", str(self.folder))
+        code, out, err = run_cli("update", str(self.vault), "--pinned-from", str(self.folder))
         self.assertEqual(code, 1)
         self.assertIn("02 Week.md", err)
         self.assertFalse((self.vault / BACKLOG).exists())
         self.assertEqual(files_outside_git(self.vault), before)
 
-    def test_a_note_folder_is_never_read_as_a_plugin(self):
+    def test_a_pins_entry_without_install_to_is_refused_before_anything_is_planned(self):
         self.install_vault()
-        folder = self.vault / ".obsidian" / "plugins" / DASHBOARD_ID  # a manifest here must never be read
-        folder.mkdir(parents=True)
-        (folder / "manifest.json").write_text('{"version": "9.9.9"}', encoding="utf-8")
-        changes = install.plan_update(self.vault, tools=None, pins=self.pins)
-        self.assertEqual([change for change in changes if change.action == "plugin"], [])
+        self.pins["ninja-board"] = {"version": "1.0.2", "in_directory": False, "files": {}}  # an old pins.json entry
+        before = snapshot(self.vault)
+        for args in ((), ("--dry-run",)):
+            with self.subTest(args=args):
+                code, out, err = run_cli("update", str(self.vault), *args)
+                self.assertEqual(code, 1)
+                self.assertIn("'ninja-board' has no install_to", err)
+        self.assertEqual(snapshot(self.vault), before)
 
 
 class ToolTests(UpdateTestCase):
@@ -279,9 +288,10 @@ class ToolTests(UpdateTestCase):
         code, out, err = run_cli("update", str(self.vault), "--tools", "claude-code")
         self.assertEqual(code, 0, err)
         self.assertIn("tool  claude-code  added to agent_tools\n", out)
-        self.assertIn("add  CLAUDE.md\n", out)
+        self.assertIn("add  .claude/CLAUDE.md\n", out)
         self.assertIn("add  .claude/skills  link to .agents/skills\n", out)
-        self.assertTrue((self.vault / "CLAUDE.md").is_file())
+        self.assertEqual(self.read(CLAUDE), "@../AGENTS.md\n@../.memory/MEMORY.md\n")
+        self.assertFalse((self.vault / "CLAUDE.md").exists())
         self.assertEqual(os.path.realpath(self.vault / ".claude" / "skills"),
                          os.path.realpath(self.vault / ".agents" / "skills"))
         self.assertEqual(agent_tools(self.vault), ["codex", "claude-code"])
@@ -378,7 +388,7 @@ class RecheckTests(UpdateTestCase):
         return install.plan_update(self.vault, tools=tools, pins=self.pins)
 
     def apply(self, changes):
-        install.apply_update(self.vault, changes, plugins_from=self.folder, pins=self.pins)
+        install.apply_update(self.vault, changes, pinned_from=self.folder, pins=self.pins)
 
     def test_planned_replace_becomes_keep_aside_when_the_person_edits_first(self):
         self.install_vault()
@@ -410,12 +420,13 @@ class RecheckTests(UpdateTestCase):
     def test_planned_add_keeps_a_file_the_person_created_first(self):
         self.install_vault(("codex",))
         changes = self.plan(tools=["claude-code"])
-        self.assertIn(("add", "CLAUDE.md"), [(c.action, c.path) for c in changes])
-        (self.vault / "CLAUDE.md").write_text("my own notes\n", encoding="utf-8")
+        self.assertIn(("add", CLAUDE), [(c.action, c.path) for c in changes])
+        (self.vault / ".claude").mkdir()
+        (self.vault / CLAUDE).write_text("my own notes\n", encoding="utf-8")
         self.apply(changes)
-        self.assertEqual(self.read("CLAUDE.md.mine"), "my own notes\n")
-        kit_text = (install.TEMPLATE / "tools" / "claude-code" / "CLAUDE.md").read_text(encoding="utf-8")
-        self.assertEqual(self.read("CLAUDE.md"), kit_text)
+        self.assertEqual(self.read(CLAUDE + ".mine"), "my own notes\n")
+        kit_text = (install.TEMPLATE / "tools" / "claude-code" / CLAUDE).read_text(encoding="utf-8")
+        self.assertEqual(self.read(CLAUDE), kit_text)
 
     def test_planned_dashboard_is_not_overwritten_when_it_appears_first(self):
         self.install_vault()
@@ -468,43 +479,88 @@ class OutputTests(UpdateTestCase):
         self.assertIn("→".encode("utf-8"), pipe.buffer.getvalue())
 
 
-class PluginTests(UpdateTestCase):
-    def install_with_older_ninja_board(self):
-        """A vault with ninja-board 1.0.0 installed; the pins now say 1.1.0 and their files are the new release."""
-        pins, folder = fake_plugins(self.tmp)
-        pins["ninja-board"]["in_directory"] = False
-        install.install(self.vault, ["codex"], plugins_from=folder, pins=pins, today=TODAY)
-        (self.vault / ".obsidian" / "plugins" / "ninja-board" / "manifest.json").write_text(
-            '{"version": "1.0.0"}', encoding="utf-8")
-        manifest = b'{"version": "1.1.0"}\n'
-        main = b"new main\n"
-        release = folder / "ninja-board"
-        (release / "manifest.json").write_bytes(manifest)
-        (release / "main.js").write_bytes(main)
-        pins["ninja-board"]["version"] = "1.1.0"
-        pins["ninja-board"]["files"]["manifest.json"]["sha256"] = hashlib.sha256(manifest).hexdigest()
-        pins["ninja-board"]["files"]["main.js"]["sha256"] = hashlib.sha256(main).hexdigest()
-        return pins, folder
+class UpgradeFrom011Tests(UpdateTestCase):
+    """A vault from kit 0.1.1 has Claude Code's file at the root and plugin files Obsidian now owns."""
 
-    def test_pinned_plugin_is_replaced_from_plugins_from(self):
-        pins, folder = self.install_with_older_ninja_board()
-        plugin_dir = self.vault / ".obsidian" / "plugins" / "ninja-board"
-        with mock.patch.object(install, "load_pins", return_value=pins):
-            code, out, err = run_cli("update", str(self.vault), "--plugins-from", str(folder))
-        self.assertEqual(code, 0, err)
-        self.assertIn("plugin  .obsidian/plugins/ninja-board  ninja-board 1.0.0 → 1.1.0\n", out)
-        self.assertEqual((plugin_dir / "main.js").read_bytes(), b"new main\n")
-        self.assertEqual((plugin_dir / "manifest.json").read_bytes(), b'{"version": "1.1.0"}\n')
-        with mock.patch.object(install, "load_pins", return_value=pins):
-            self.assertEqual(run_cli("update", str(self.vault))[1], "already up to date\nmigration: none\n")
+    def install_011_vault(self):
+        """Install, then put the vault back as 0.1.1 left it: CLAUDE.md at the root and recorded in kit-files,
+        the plugin files in .obsidian/plugins, no hide snippet, system_version 0.1.1."""
+        self.install_vault(("claude-code",))
+        (self.vault / CLAUDE).unlink()
+        (self.vault / install.HIDE_SNIPPET).unlink()
+        (self.vault / "CLAUDE.md").write_bytes(OLD_CLAUDE)
+        for plugin_id in ("obsidian-tasks-plugin", "ninja-board"):
+            folder = self.vault / ".obsidian" / "plugins" / plugin_id
+            folder.mkdir(parents=True, exist_ok=True)
+            for name in ("main.js", "manifest.json", "styles.css"):
+                kind = '{"id": "' + plugin_id + '", "version": "1.0.0"}' if name == "manifest.json" else name
+                (folder / name).write_text(kind + "\n", encoding="utf-8")
+        config = set_version(self.read(CONFIG), "0.1.1")
+        (self.vault / CONFIG).write_bytes(config.encode("utf-8"))
+        recorded = install.read_kit_files(self.vault)
+        del recorded[CLAUDE], recorded[install.HIDE_SNIPPET]
+        recorded["CLAUDE.md"] = hashlib.sha256(OLD_CLAUDE).hexdigest()
+        install.write_kit_files(self.vault, recorded)
 
-    def test_dry_run_never_fetches_a_plugin(self):
-        pins, _ = self.install_with_older_ninja_board()
-        pins["ninja-board"]["files"]["main.js"]["sha256"] = None  # a fetch would refuse this
-        with mock.patch.object(install, "load_pins", return_value=pins):
-            code, out, err = run_cli("update", str(self.vault), "--dry-run")
+    def plugin_files(self) -> dict[str, bytes]:
+        folder = self.vault / ".obsidian" / "plugins"
+        return {path.relative_to(folder).as_posix(): path.read_bytes() for path in folder.rglob("*") if path.is_file()}
+
+    def test_plan_moves_the_claude_file_adds_the_snippet_and_names_no_plugin(self):
+        self.install_011_vault()
+        changes = install.plan_update(self.vault, tools=None, pins=self.pins)
+        self.assertEqual([(change.action, change.path) for change in changes], [
+            ("version", CONFIG),
+            ("add", CLAUDE),
+            ("add", install.HIDE_SNIPPET),
+            ("remove", "CLAUDE.md"),
+        ])
+        code, out, err = run_cli("update", str(self.vault), "--dry-run")
         self.assertEqual(code, 0, err)
-        self.assertIn("plugin  .obsidian/plugins/ninja-board  ninja-board 1.0.0 → 1.1.0\n", out)
+        self.assertEqual(out, f"version  {CONFIG}  0.1.1 → {V}\n"
+                              f"add  {CLAUDE}\n"
+                              f"add  {install.HIDE_SNIPPET}  turn it on in Settings → Appearance → CSS snippets\n"
+                              "remove  CLAUDE.md  moved to .claude/CLAUDE.md\n"
+                              "migration: none\n")
+
+    def test_apply_moves_the_claude_file_and_leaves_the_plugin_files_alone(self):
+        self.install_011_vault()
+        plugins = self.plugin_files()
+        self.assertEqual(len(plugins), 7)  # six plugin files, and the Tasks settings
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertFalse((self.vault / "CLAUDE.md").exists())
+        self.assertEqual(self.read(CLAUDE), "@../AGENTS.md\n@../.memory/MEMORY.md\n")
+        snippet = (install.TEMPLATE / "vault" / install.HIDE_SNIPPET).read_bytes()
+        self.assertEqual((self.vault / install.HIDE_SNIPPET).read_bytes(), snippet)
+        self.assertEqual(self.plugin_files(), plugins)  # byte for byte: an update never touches .obsidian/plugins
+        recorded = install.read_kit_files(self.vault)
+        self.assertEqual(recorded[install.HIDE_SNIPPET], hashlib.sha256(snippet).hexdigest())
+        self.assertIn(CLAUDE, recorded)
+        self.assertNotIn("CLAUDE.md", recorded)
+        self.assertEqual(run_cli("update", str(self.vault))[1], "already up to date\nmigration: none\n")
+        self.assertEqual(git_run(self.vault, "status", "--porcelain").stdout, "")
+
+    def test_an_edited_claude_md_stays(self):
+        self.install_011_vault()
+        (self.vault / "CLAUDE.md").write_bytes(OLD_CLAUDE + b"my own rule\n")
+        changes = install.plan_update(self.vault, tools=None, pins=self.pins)
+        self.assertNotIn(("remove", "CLAUDE.md"), [(change.action, change.path) for change in changes])
+        code, out, err = run_cli("update", str(self.vault), "--dry-run")
+        self.assertIn(f"add  {CLAUDE}  your edited CLAUDE.md stays; move your edits here\n", out)
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.vault / "CLAUDE.md").read_bytes(), OLD_CLAUDE + b"my own rule\n")
+        self.assertEqual(self.read(CLAUDE), "@../AGENTS.md\n@../.memory/MEMORY.md\n")
+        self.assertEqual(run_cli("update", str(self.vault))[1], "already up to date\nmigration: none\n")
+
+    def test_a_plugin_folder_is_never_read(self):
+        self.install_011_vault()
+        manifest = self.vault / ".obsidian" / "plugins" / "ninja-board" / "manifest.json"
+        manifest.write_text("not json", encoding="utf-8")
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.plugin_files()["ninja-board/manifest.json"], b"not json")
 
 
 if __name__ == "__main__":

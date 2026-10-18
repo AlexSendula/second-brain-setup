@@ -4,8 +4,6 @@ import hashlib
 import os
 from pathlib import Path
 
-PLUGIN_IDS = ("obsidian-tasks-plugin", "ninja-board")
-PLUGIN_FILES = ("main.js", "manifest.json", "styles.css")
 DASHBOARD_ID = "ninja-board-dashboards"
 DASHBOARD_NAMES = ("01 Today.md", "02 Week.md", "03 Projects.md", "04 Backlog.md", "05 Guide.md")
 
@@ -37,23 +35,15 @@ def fake_dashboard(name: str) -> bytes:
     return text.encode("utf-8")
 
 
-def fake_plugins(tmp: Path) -> tuple[dict, Path]:
-    """Small fake plugin files and fake dashboard notes in tmp/plugins-from. Return pins whose sha256 match them, and
-    that folder. The dashboard entry has install_to, like the real pin: its notes are not plugin files."""
-    folder = tmp / "plugins-from"
-    pins = {}
-    for plugin_id in PLUGIN_IDS:
-        files = {}
-        for name in PLUGIN_FILES:
-            data = f"fake {plugin_id} {name}\n".encode("utf-8")
-            files[name] = _write_fake(folder / plugin_id / name, data, f"https://example.invalid/{plugin_id}/{name}")
-        pins[plugin_id] = {"version": "0.0.0", "in_directory": True, "files": files}
+def fake_pins(tmp: Path) -> tuple[dict, Path]:
+    """Fake dashboard notes in tmp/pinned-from. Return pins whose sha256 match them, and that folder.
+    The entry has install_to, like the real pin: every pins entry is a set of notes."""
+    folder = tmp / "pinned-from"
     notes = {}
     for name in DASHBOARD_NAMES:
         url = f"https://example.invalid/{DASHBOARD_ID}/{name.replace(' ', '%20')}"
         notes[name] = _write_fake(folder / DASHBOARD_ID / name, fake_dashboard(name), url)
-    pins[DASHBOARD_ID] = {"version": "0.0.0", "in_directory": False, "install_to": "01 Dashboard", "files": notes}
-    return pins, folder
+    return {DASHBOARD_ID: {"version": "0.0.0", "install_to": "01 Dashboard", "files": notes}}, folder
 
 
 def _write_fake(path: Path, data: bytes, url: str) -> dict:

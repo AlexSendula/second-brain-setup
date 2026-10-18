@@ -1,4 +1,4 @@
-"""Tests for install.py: validation, the vault skeleton, plugins, the checksum list and the first saved version."""
+"""Tests for install.py: validation, the vault skeleton, Obsidian settings, the checksum list, saved versions."""
 
 import contextlib
 import hashlib
@@ -15,9 +15,10 @@ from pathlib import Path
 from unittest import mock
 
 import install
-from helpers import DASHBOARD_ID, DASHBOARD_NAMES, fake_plugins, isolated_git_env
+from helpers import DASHBOARD_ID, DASHBOARD_NAMES, fake_pins, isolated_git_env
 
 TODAY = date(2026, 10, 16)
+CLAUDE_FILE = "@../AGENTS.md\n@../.memory/MEMORY.md\n"  # imports in .claude/CLAUDE.md are relative to that file
 
 
 def run_main(*args: str) -> tuple[int, str]:
@@ -28,7 +29,7 @@ def run_main(*args: str) -> tuple[int, str]:
 
 
 def do_install(target: Path, tools: list[str]) -> None:
-    install.install(target, tools, plugins_from=None, pins={}, today=TODAY)
+    install.install(target, tools, pinned_from=None, pins={}, today=TODAY)
 
 
 def isolate_git(case: unittest.TestCase, tmp: Path) -> Path:
@@ -119,8 +120,14 @@ class InstallTests(unittest.TestCase):
 
         claude = self.tmp / "cc"
         do_install(claude, ["claude-code"])
-        self.assertTrue((claude / "CLAUDE.md").is_file())
+        self.assertTrue((claude / ".claude" / "CLAUDE.md").is_file())
         self.assertFalse((claude / ".vscode").exists())
+
+    def test_claude_code_file_is_dot_claude_claude_md_with_two_imports(self):
+        target = self.tmp / "v"
+        do_install(target, ["claude-code"])
+        self.assertEqual((target / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"), CLAUDE_FILE)
+        self.assertFalse((target / "CLAUDE.md").exists())
 
     def test_refuses_non_empty_folder(self):
         target = self.tmp / "v"
@@ -296,59 +303,30 @@ class LinkDirTests(unittest.TestCase):
                 install.link_dir(self.link, self.target)
 
 
-class PluginTests(unittest.TestCase):
+class ObsidianSetupTests(unittest.TestCase):
+    """The kit installs no plugin code. It sets up what Obsidian's own plugins need and hides the agent's files."""
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
         isolate_git(self, self.tmp)
 
-    def test_plugins_land_in_obsidian(self):
-        pins, folder = fake_plugins(self.tmp)
+    def test_no_plugin_code_is_installed(self):
+        pins, folder = fake_pins(self.tmp)
         target = self.tmp / "v"
-        install.install(target, ["claude-code"], plugins_from=folder, pins=pins, today=TODAY)
-        for plugin_id, plugin in pins.items():
-            if "install_to" in plugin:  # a note folder, not a plugin: see DashboardTests
-                continue
-            with self.subTest(plugin=plugin_id):
-                installed = target / ".obsidian" / "plugins" / plugin_id / "main.js"
-                self.assertEqual(installed.read_bytes(), (folder / plugin_id / "main.js").read_bytes())
-        data = target / ".obsidian" / "plugins" / "obsidian-tasks-plugin" / "data.json"
-        self.assertIn('"taskFormat": "dataview"', data.read_text(encoding="utf-8"))
+        install.install(target, ["claude-code"], pinned_from=folder, pins=pins, today=TODAY)
+        plugins = target / ".obsidian" / "plugins"
+        found = sorted(path.relative_to(plugins).as_posix() for path in plugins.rglob("*") if path.is_file())
+        self.assertEqual(found, ["obsidian-tasks-plugin/data.json"])
+        for name in ("main.js", "manifest.json", "styles.css"):
+            self.assertEqual(list(target.rglob(name)), [], name)
 
-    def test_checksum_mismatch_writes_nothing(self):
-        pins, folder = fake_plugins(self.tmp)
-        (folder / "obsidian-tasks-plugin" / "main.js").write_bytes(b"corrupted\n")
+    def test_tasks_settings_are_the_templates(self):
         target = self.tmp / "v"
-        with self.assertRaises(install.InstallError) as caught:
-            install.install(target, ["claude-code"], plugins_from=folder, pins=pins, today=TODAY)
-        self.assertIn("main.js", str(caught.exception))
-        self.assertFalse(target.exists())
-
-    def test_missing_local_file_is_named(self):
-        pins, folder = fake_plugins(self.tmp)
-        (folder / "ninja-board" / "styles.css").unlink()
-        with self.assertRaises(install.InstallError) as caught:
-            install.fetch_plugins(pins, folder, self.tmp / "dest")
-        self.assertIn("styles.css", str(caught.exception))
-
-    def test_unpinned_download_is_refused(self):
-        pins = {
-            "ninja-board": {
-                "version": "1.0.0",
-                "in_directory": False,
-                "files": {"main.js": {"url": "https://example.invalid/main.js", "sha256": None}},
-            }
-        }
-        with self.assertRaises(install.InstallError) as caught:
-            install.fetch_plugins(pins, None, self.tmp / "dest")
-        self.assertIn("not pinned yet", str(caught.exception))
-
-    def test_local_unpinned_file_warns(self):
-        pins, folder = fake_plugins(self.tmp)
-        pins["ninja-board"]["files"]["main.js"]["sha256"] = None
-        warnings = install.fetch_plugins(pins, folder, self.tmp / "dest")
-        self.assertEqual(warnings, ["ninja-board/main.js is not pinned yet"])
+        do_install(target, ["codex"])
+        rel = Path(".obsidian") / "plugins" / "obsidian-tasks-plugin" / "data.json"
+        self.assertEqual((target / rel).read_bytes(), (install.TEMPLATE / "vault" / rel).read_bytes())
 
     def test_tasks_settings(self):
         path = install.TEMPLATE / "vault" / ".obsidian" / "plugins" / "obsidian-tasks-plugin" / "data.json"
@@ -358,14 +336,26 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(statuses["w"]["type"], "ON_HOLD")
         self.assertEqual(statuses["w"]["nextStatusSymbol"], "x")
 
+    def test_agent_files_are_hidden_in_obsidian(self):
+        target = self.tmp / "v"
+        do_install(target, ["codex"])
+        obsidian = target / ".obsidian"
+        snippet = obsidian / "snippets" / "hide-agent-files.css"
+        self.assertEqual(snippet.read_bytes(), (install.TEMPLATE / "vault" / install.HIDE_SNIPPET).read_bytes())
+        self.assertIn('[data-path="AGENTS.md"]', snippet.read_text(encoding="utf-8"))
+        appearance = json.loads((obsidian / "appearance.json").read_text(encoding="utf-8"))
+        self.assertEqual(appearance, {"enabledCssSnippets": ["hide-agent-files"]})
+        app = json.loads((obsidian / "app.json").read_text(encoding="utf-8"))
+        self.assertEqual(app["userIgnoreFilters"], ["AGENTS.md"])
+
     def test_obsidian_settings_are_installed(self):
         target = self.tmp / "v"
         do_install(target, ["claude-code"])
         obsidian = target / ".obsidian"
         app = json.loads((obsidian / "app.json").read_text(encoding="utf-8"))
-        self.assertEqual(app, {"openBehavior": "file:01 Dashboard/01 Today.md"})
+        self.assertEqual(app, {"openBehavior": "file:01 Dashboard/01 Today.md", "userIgnoreFilters": ["AGENTS.md"]})
         community = json.loads((obsidian / "community-plugins.json").read_text(encoding="utf-8"))
-        self.assertEqual(community, ["obsidian-tasks-plugin", "ninja-board"])
+        self.assertEqual(community, ["obsidian-tasks-plugin", "ninja-board"])  # listed, and installed by Obsidian
         core = json.loads((obsidian / "core-plugins.json").read_text(encoding="utf-8"))
         self.assertEqual(
             core,
@@ -404,13 +394,47 @@ class PluginTests(unittest.TestCase):
             },
         )
 
+
+class FetchPinnedTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+    def test_missing_local_file_is_named(self):
+        pins, folder = fake_pins(self.tmp)
+        (folder / DASHBOARD_ID / "05 Guide.md").unlink()
+        with self.assertRaises(install.InstallError) as caught:
+            install.fetch_pinned(pins, folder, self.tmp / "dest")
+        self.assertIn("05 Guide.md", str(caught.exception))
+
+    def test_unpinned_download_is_refused(self):
+        pins = {
+            DASHBOARD_ID: {
+                "version": "1.0.0",
+                "install_to": "01 Dashboard",
+                "files": {"01 Today.md": {"url": "https://example.invalid/today.md", "sha256": None}},
+            }
+        }
+        with self.assertRaises(install.InstallError) as caught:
+            install.fetch_pinned(pins, None, self.tmp / "dest")
+        self.assertIn("not pinned yet", str(caught.exception))
+        self.assertIn("--pinned-from", str(caught.exception))
+
+    def test_local_unpinned_file_warns(self):
+        pins, folder = fake_pins(self.tmp)
+        pins[DASHBOARD_ID]["files"]["01 Today.md"]["sha256"] = None
+        warnings = install.fetch_pinned(pins, folder, self.tmp / "dest")
+        self.assertEqual(warnings, [f"{DASHBOARD_ID}/01 Today.md is not pinned yet"])
+
     @unittest.skipUnless(os.environ.get("KIT_ONLINE") == "1", "downloads from GitHub; set KIT_ONLINE=1")
-    def test_online_tasks_download(self):
-        # Tasks only: the ninja-board repository, and so its dashboard notes, is not public yet.
-        tasks = {"obsidian-tasks-plugin": install.load_pins()["obsidian-tasks-plugin"]}
-        self.assertEqual(install.fetch_plugins(tasks, None, self.tmp / "dest"), [])
-        for name in tasks["obsidian-tasks-plugin"]["files"]:
-            self.assertTrue((self.tmp / "dest" / "obsidian-tasks-plugin" / name).is_file(), name)
+    def test_online_dashboard_download(self):
+        pins = install.load_pins()
+        self.assertEqual(install.fetch_pinned(pins, None, self.tmp / "dest"), [])
+        for name, pin in pins[DASHBOARD_ID]["files"].items():
+            with self.subTest(note=name):
+                data = (self.tmp / "dest" / DASHBOARD_ID / name).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), pin["sha256"])
 
 
 class DashboardTests(unittest.TestCase):
@@ -423,9 +447,9 @@ class DashboardTests(unittest.TestCase):
         isolate_git(self, self.tmp)
 
     def test_install_puts_the_five_dashboards_in_the_folder_dated_today(self):
-        pins, folder = fake_plugins(self.tmp)
+        pins, folder = fake_pins(self.tmp)
         target = self.tmp / "v"
-        install.install(target, ["codex"], plugins_from=folder, pins=pins, today=TODAY)
+        install.install(target, ["codex"], pinned_from=folder, pins=pins, today=TODAY)
         self.assertEqual(sorted(p.name for p in (target / "01 Dashboard").iterdir()), sorted(DASHBOARD_NAMES))
         for name in DASHBOARD_NAMES:
             with self.subTest(note=name):
@@ -435,21 +459,37 @@ class DashboardTests(unittest.TestCase):
         self.assertFalse((target / ".obsidian" / "plugins" / DASHBOARD_ID).exists())
 
     def test_dashboard_checksum_mismatch_writes_nothing(self):
-        pins, folder = fake_plugins(self.tmp)
+        pins, folder = fake_pins(self.tmp)
         (folder / DASHBOARD_ID / "02 Week.md").write_bytes(b"corrupted\n")
         target = self.tmp / "v"
         with self.assertRaises(install.InstallError) as caught:
-            install.install(target, ["codex"], plugins_from=folder, pins=pins, today=TODAY)
+            install.install(target, ["codex"], pinned_from=folder, pins=pins, today=TODAY)
         self.assertIn("02 Week.md", str(caught.exception))
+        self.assertFalse(target.exists())
+
+    def test_a_pins_entry_without_install_to_is_refused_and_writes_nothing(self):
+        pins, folder = fake_pins(self.tmp)
+        pins["obsidian-tasks-plugin"] = {  # an entry from an old pins.json: plugin files, not notes
+            "version": "8.5.0",
+            "in_directory": True,
+            "files": {"main.js": {"url": "https://example.invalid/main.js", "sha256": None}},
+        }
+        target = self.tmp / "v"
+        with self.assertRaises(install.InstallError) as caught:
+            install.install(target, ["codex"], pinned_from=folder, pins=pins, today=TODAY)
+        self.assertIn("obsidian-tasks-plugin", str(caught.exception))
+        self.assertIn("install_to", str(caught.exception))
         self.assertFalse(target.exists())
 
     def test_kit_template_carries_no_copy_of_the_dashboards(self):
         self.assertEqual(list((install.TEMPLATE / "vault" / "01 Dashboard").glob("*.md")), [])
 
     def test_pinned_dashboards_come_from_the_ninja_board_release(self):
-        entry = install.load_pins()[DASHBOARD_ID]
+        pins = install.load_pins()
+        self.assertEqual(list(pins), [DASHBOARD_ID])  # the kit pins notes only: Obsidian installs the plugins
+        entry = pins[DASHBOARD_ID]
         self.assertEqual(entry["version"], "1.0.2")
-        self.assertFalse(entry["in_directory"])
+        self.assertEqual(sorted(entry), ["files", "install_to", "version"])
         self.assertEqual(entry["install_to"], "01 Dashboard")
         self.assertEqual(sorted(entry["files"]), sorted(DASHBOARD_NAMES))
         for name, pin in entry["files"].items():
@@ -490,8 +530,20 @@ class KitFilesTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((self.vault / rel).read_bytes()).hexdigest(), digest)
         self.assertIn("AGENTS.md", listed)
         self.assertIn(".agents/skills/brain/SKILL.md", listed)
+        self.assertIn(".claude/CLAUDE.md", listed)
+        self.assertIn(install.HIDE_SNIPPET, listed)
+        self.assertNotIn("CLAUDE.md", listed)  # the 0.1.x place; the kit no longer writes it
         self.assertNotIn("99 System/config.md", listed)
         self.assertNotIn("01 Dashboard/01 Today.md", listed)
+
+    def test_kit_files_record_the_claude_file_and_the_snippet_with_their_checksums(self):
+        listed = install.read_kit_files(self.vault)
+        claude = hashlib.sha256(CLAUDE_FILE.encode("utf-8")).hexdigest()
+        snippet = hashlib.sha256((install.TEMPLATE / "vault" / install.HIDE_SNIPPET).read_bytes()).hexdigest()
+        self.assertEqual(listed[".claude/CLAUDE.md"], claude)
+        self.assertEqual(listed[install.HIDE_SNIPPET], snippet)
+        tools = list(install.TOOLS)  # what update expects is what install recorded
+        self.assertEqual(install.kit_file_shas(tools, install.placeholder_values(TODAY, tools)), listed)
 
     def test_kit_files_format(self):
         raw = (self.vault / install.KIT_FILES).read_bytes()

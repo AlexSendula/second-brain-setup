@@ -1,0 +1,5 @@
+/* Second Brain: hides AGENTS.md, the agent's instructions, from the file list.
+   To show it again, turn off hide-agent-files in Settings → Appearance → CSS snippets. */
+.nav-file:has(> .nav-file-title[data-path="AGENTS.md"]) {
+  display: none;
+}

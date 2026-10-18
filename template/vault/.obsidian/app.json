@@ -1,3 +1,6 @@
 {
-  "openBehavior": "file:01 Dashboard/01 Today.md"
+  "openBehavior": "file:01 Dashboard/01 Today.md",
+  "userIgnoreFilters": [
+    "AGENTS.md"
+  ]
 }

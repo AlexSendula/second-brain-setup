@@ -44,6 +44,7 @@ PLACEHOLDER = re.compile(r"\{\{\w+\}\}")
 KIT_FILES = ".agents/kit-files.txt"
 CONFIG = "99 System/config.md"
 CLAUDE_SKILLS = ".claude/skills"  # the link Claude Code reads; it points at .agents/skills
+HIDE_SNIPPET = ".obsidian/snippets/hide-agent-files.css"  # hides AGENTS.md from Obsidian's file list
 FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)  # CRLF too: Windows editors save that way
 
 
@@ -148,7 +149,12 @@ def link_dir(link: Path, target: Path) -> None:
 
 def kit_system_files(tools: list[str]) -> dict[str, Path]:
     """The files an install writes that updates may replace: vault-relative POSIX path -> kit source file."""
-    return {"AGENTS.md": TEMPLATE / "vault" / "AGENTS.md", **_skill_files(), **_tool_files(tools)}
+    return {
+        "AGENTS.md": TEMPLATE / "vault" / "AGENTS.md",
+        HIDE_SNIPPET: TEMPLATE / "vault" / HIDE_SNIPPET,
+        **_skill_files(),
+        **_tool_files(tools),
+    }
 
 
 def _skill_files() -> dict[str, Path]:
@@ -188,7 +194,11 @@ def write_kit_files(vault: Path, shas: dict[str, str]) -> None:
     (vault / KIT_FILES).write_text("".join(lines), encoding="utf-8", newline="\n")
 
 
-SYSTEM_FILES = frozenset({"AGENTS.md", "CLAUDE.md", ".claude/settings.json", ".vscode/settings.json"})
+# CLAUDE.md is the 0.1.x place for Claude Code's file. The kit no longer writes it, but a 0.1.x vault records it,
+# and an update removes it from there when the person did not edit it.
+SYSTEM_FILES = frozenset({
+    "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", ".claude/settings.json", HIDE_SNIPPET, ".vscode/settings.json",
+})
 
 
 def _inside_vault(vault: Path, rel: str) -> bool:
@@ -250,26 +260,30 @@ def download(url: str) -> bytes:
         raise InstallError(f"could not download {url}: {error}") from error
 
 
-def fetch_plugins(pins: dict, plugins_from: Path | None, dest: Path) -> list[str]:
-    """Write each pinned file to dest/<id>/<file>, checked against its sha256. Return warning lines."""
+def fetch_pinned(pins: dict, pinned_from: Path | None, dest: Path) -> list[str]:
+    """Write each pinned file to dest/<id>/<file>, checked against its sha256. Return warning lines.
+
+    pinned_from is a local folder laid out as <id>/<file>, for developers and tests. Without it, each file is
+    downloaded from its pinned url.
+    """
     warnings = []
-    for plugin_id, plugin in pins.items():
-        for name, pin in plugin["files"].items():
-            label = f"{plugin_id}/{name}"
-            if plugins_from is None:
-                if pin["sha256"] is None:
-                    raise InstallError(f"{label} is not pinned yet; use --plugins-from")
-                data = download(pin["url"])
+    for pin_id, pin in pins.items():
+        for name, file_pin in pin["files"].items():
+            label = f"{pin_id}/{name}"
+            if pinned_from is None:
+                if file_pin["sha256"] is None:
+                    raise InstallError(f"{label} is not pinned yet; use --pinned-from")
+                data = download(file_pin["url"])
             else:
-                source = plugins_from / plugin_id / name
+                source = pinned_from / pin_id / name
                 if not source.is_file():
-                    raise InstallError(f"{label} is missing from {plugins_from}")
+                    raise InstallError(f"{label} is missing from {pinned_from}")
                 data = source.read_bytes()
-            if pin["sha256"] is None:
+            if file_pin["sha256"] is None:
                 warnings.append(f"{label} is not pinned yet")
-            elif hashlib.sha256(data).hexdigest() != pin["sha256"]:
+            elif hashlib.sha256(data).hexdigest() != file_pin["sha256"]:
                 raise InstallError(f"{label} does not match its pinned sha256")
-            out = dest / plugin_id / name
+            out = dest / pin_id / name
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(data)
     return warnings
@@ -315,15 +329,16 @@ def _undo_install(target: Path, created: bool) -> None:
         target.rmdir()
 
 
-def install(target: Path, tools: list[str], *, plugins_from: Path | None, pins: dict, today: date) -> None:
+def install(target: Path, tools: list[str], *, pinned_from: Path | None, pins: dict, today: date) -> None:
     if not is_empty_dir(target):
         raise InstallError(f"{target} is not an empty folder; choose a new or empty one")
+    sources = _note_sources(pins)
     _probe_git()
     values = placeholder_values(today, tools)
-    # Fetch and check every plugin file before the first write, so a failure leaves the target untouched.
+    # Fetch and check every pinned note before the first write, so a failure leaves the target untouched.
     with tempfile.TemporaryDirectory() as staging:
         staged = Path(staging)
-        for warning in fetch_plugins(pins, plugins_from, staged):
+        for warning in fetch_pinned(pins, pinned_from, staged):
             print(f"install.py: warning: {warning}", file=sys.stderr)
         created = not target.exists()
         try:
@@ -332,19 +347,10 @@ def install(target: Path, tools: list[str], *, plugins_from: Path | None, pins: 
                 tool_dir = TEMPLATE / "tools" / tool
                 if tool_dir.is_dir():  # codex has no files
                     copy_template(tool_dir, target, values)
-            for plugin_id, plugin in pins.items():
-                if "install_to" in plugin:  # notes, not a plugin: each one goes into its folder, dated today
-                    folder = target / plugin["install_to"]
-                    folder.mkdir(parents=True, exist_ok=True)
-                    for name in plugin["files"]:
-                        rel = f"{plugin['install_to']}/{name}"
-                        data = _dated_note((staged / plugin_id / name).read_bytes(), rel, values["today"])
-                        (folder / name).write_bytes(data)
-                    continue
-                plugin_dir = target / ".obsidian" / "plugins" / plugin_id
-                plugin_dir.mkdir(parents=True, exist_ok=True)
-                for name in plugin["files"]:
-                    shutil.copyfile(staged / plugin_id / name, plugin_dir / name)
+            for rel, (pin_id, name) in sources.items():  # each pinned note goes into its folder, dated today
+                note = target / rel
+                note.parent.mkdir(parents=True, exist_ok=True)
+                note.write_bytes(_dated_note((staged / pin_id / name).read_bytes(), rel, values["today"]))
             copy_skills(target / ".agents" / "skills")
             if "claude-code" in tools:  # Claude Code reads only .claude/skills
                 link_dir(target / ".claude" / "skills", target / ".agents" / "skills")
@@ -376,7 +382,7 @@ def install(target: Path, tools: list[str], *, plugins_from: Path | None, pins: 
 class Change:
     """One step of an update. note is printed after the path and may be empty."""
 
-    action: str  # add, replace, remove, keep-aside, dashboard, plugin, tool or version
+    action: str  # add, replace, remove, keep-aside, dashboard, tool or version
     path: str
     note: str = ""
     seen: str = ""  # the sha of the vault file when the plan was made; "" when it was missing
@@ -440,21 +446,16 @@ def _aside_path(path: Path) -> Path:
     return candidate
 
 
-def _plugin_version(folder: Path) -> str:
-    manifest = folder / "manifest.json"
-    try:
-        return str(json.loads(manifest.read_text(encoding="utf-8"))["version"])
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise InstallError(f"could not read the version in {manifest}: {error}") from error
-
-
 def _note_sources(pins: dict) -> dict[str, tuple[str, str]]:
-    """Vault-relative path -> (pins id, file name) for each pinned note: the entries that have install_to."""
-    return {
-        f"{plugin['install_to']}/{name}": (plugin_id, name)
-        for plugin_id, plugin in pins.items() if "install_to" in plugin
-        for name in plugin["files"]
-    }
+    """Vault-relative path -> (pins id, file name) for each pinned note. Every pins entry is a set of notes, so an
+    entry without install_to, such as one from an old pins.json, is an InstallError."""
+    sources = {}
+    for pin_id, pin in pins.items():
+        if "install_to" not in pin:
+            raise InstallError(f"pins entry '{pin_id}' has no install_to; every entry must be a set of notes")
+        for name in pin["files"]:
+            sources[f"{pin['install_to']}/{name}"] = (pin_id, name)
+    return sources
 
 
 def _dated_note(data: bytes, rel: str, day: str) -> bytes:
@@ -468,6 +469,17 @@ def _has_own_repo(vault: Path) -> bool:
         return False
     result = _run_git(vault, "rev-parse", "--show-toplevel")
     return result.returncode == 0 and Path(result.stdout.strip()).resolve() == vault.resolve()
+
+
+def _add_note(vault: Path, rel: str, listed: dict[str, str]) -> str:
+    """What a 0.1.x person needs to know about a file that is new to their vault. The 0.1.x skill, which runs
+    the update, only knows to read this list aloud, so the hints live here."""
+    if rel == HIDE_SNIPPET:
+        return "turn it on in Settings → Appearance → CSS snippets"
+    old = vault / "CLAUDE.md"
+    if rel == ".claude/CLAUDE.md" and old.is_file() and listed.get("CLAUDE.md") != _sha256(old.read_bytes()):
+        return "your edited CLAUDE.md stays; move your edits here"
+    return ""
 
 
 def plan_update(vault: Path, *, tools: list[str] | None, pins: dict) -> list[Change]:
@@ -493,7 +505,7 @@ def plan_update(vault: Path, *, tools: list[str] | None, pins: dict) -> list[Cha
     for rel in sorted(expected):
         target = vault / rel
         if not target.exists():
-            changes.append(Change("add", rel))
+            changes.append(Change("add", rel, _add_note(vault, rel, listed)))
             continue
         vault_sha = _sha256(target.read_bytes())  # V
         if vault_sha == expected[rel] or listed.get(rel) == expected[rel]:
@@ -505,24 +517,13 @@ def plan_update(vault: Path, *, tools: list[str] | None, pins: dict) -> list[Cha
     for rel in sorted(listed):  # only files the kit installed; an edited one is left alone
         target = vault / rel
         if rel not in expected and target.is_file() and _sha256(target.read_bytes()) == listed[rel]:
-            changes.append(Change("remove", rel, seen=listed[rel]))
+            note = "moved to .claude/CLAUDE.md" if rel == "CLAUDE.md" else ""
+            changes.append(Change("remove", rel, note, seen=listed[rel]))
     if "claude-code" in new_tools and not os.path.lexists(vault / CLAUDE_SKILLS):
         changes.append(Change("add", CLAUDE_SKILLS, "link to .agents/skills"))
     for rel in sorted(_note_sources(pins)):  # the pinned notes the vault lacks; an existing note is never rewritten
         if not (vault / rel).exists():
             changes.append(Change("dashboard", rel))
-    for plugin_id in sorted(pins):
-        plugin = pins[plugin_id]
-        if "install_to" in plugin:  # a folder of notes: its files are never read as a manifest
-            continue
-        folder = vault / ".obsidian" / "plugins" / plugin_id
-        if plugin["in_directory"] or not folder.is_dir():
-            continue
-        installed = _plugin_version(folder)
-        if installed != plugin["version"]:
-            changes.append(Change(
-                "plugin", folder.relative_to(vault).as_posix(), f"{plugin_id} {installed} → {plugin['version']}"
-            ))
     return changes
 
 
@@ -564,10 +565,10 @@ def _recorded(vault: Path, expected: dict[str, str], listed: dict[str, str]) -> 
     return records
 
 
-def apply_update(vault: Path, changes: list[Change], *, plugins_from: Path | None, pins: dict) -> None:
-    """Write what plan_update chose. Plugins and planned notes are fetched before the first write. Each file is checked
+def apply_update(vault: Path, changes: list[Change], *, pinned_from: Path | None, pins: dict) -> None:
+    """Write what plan_update chose. Planned notes are fetched before the first write. Each file is checked
     again just before it is written or removed, so an edit made since the plan is kept aside or left alone,
-    never overwritten."""
+    never overwritten. An update never reads or writes .obsidian/plugins: Obsidian owns the plugins."""
     tools_added = [change.path for change in changes if change.action == "tool"]
     tools = config_tools(read_config(vault)) + tools_added
     values = placeholder_values(date.today(), tools)
@@ -577,29 +578,23 @@ def apply_update(vault: Path, changes: list[Change], *, plugins_from: Path | Non
     for change in changes:
         if change.action in ("add", "replace", "keep-aside") and change.path != CLAUDE_SKILLS:
             contents[change.path] = _installed_bytes(change.path, wanted[change.path], values)
-    plugin_ids = [Path(change.path).name for change in changes if change.action == "plugin"]
-    plugin_pins = {plugin_id: pins[plugin_id] for plugin_id in plugin_ids}
-    if any(change.action == "dashboard" for change in changes):  # the pinned notes are fetched like plugin files
-        plugin_pins.update({plugin_id: plugin for plugin_id, plugin in pins.items() if "install_to" in plugin})
 
     with tempfile.TemporaryDirectory() as staging:
         staged = Path(staging)
-        for warning in fetch_plugins(plugin_pins, plugins_from, staged):
-            print(f"install.py: warning: {warning}", file=sys.stderr)
         sources = _note_sources(pins)
         dashboards = {}  # every note is built before the first write, so a bad pin writes no note at all
+        if any(change.action == "dashboard" for change in changes):  # all pinned files are fetched and checked
+            for warning in fetch_pinned(pins, pinned_from, staged):
+                print(f"install.py: warning: {warning}", file=sys.stderr)
         for change in changes:
             if change.action == "dashboard":
-                plugin_id, name = sources[change.path]
-                data = (staged / plugin_id / name).read_bytes()
+                pin_id, name = sources[change.path]
+                data = (staged / pin_id / name).read_bytes()
                 dashboards[change.path] = _dated_note(data, change.path, values["today"])
         for change in changes:
             target = vault / change.path
             if change.action == "remove":
                 _remove_if_unchanged(target, change.seen)
-            elif change.action == "plugin":
-                for name in plugin_pins[target.name]["files"]:
-                    shutil.copyfile(staged / target.name / name, target / name)
             elif change.path == CLAUDE_SKILLS:
                 if not os.path.lexists(target):
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -627,7 +622,7 @@ def _save(vault: Path, message: str) -> None:
         git(vault, "-c", "commit.gpgsign=false", "commit", "-q", "-m", message)
 
 
-def update(vault: Path, dry_run: bool, tools: list[str] | None, plugins_from: Path | None) -> None:
+def update(vault: Path, dry_run: bool, tools: list[str] | None, pinned_from: Path | None) -> None:
     pins = load_pins()
     changes = plan_update(vault, tools=tools, pins=pins)
     if not changes:
@@ -641,24 +636,25 @@ def update(vault: Path, dry_run: bool, tools: list[str] | None, plugins_from: Pa
         return
     version = kit_version()
     _save(vault, f"Saved before update to {version}")
-    apply_update(vault, changes, plugins_from=plugins_from, pins=pins)
+    apply_update(vault, changes, pinned_from=pinned_from, pins=pins)
     _save(vault, f"Updated to second-brain-setup {version}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(prog="install.py", description="Install or update a second-brain Obsidian vault.")
     commands = parser.add_subparsers(dest="command", required=True)
+    pinned_help = "developer flag: a local folder laid out as <id>/<file>, read instead of downloading"
 
     create = commands.add_parser("install", help="create a new vault")
     create.add_argument("folder", type=Path)
     create.add_argument("--tools", help=f"comma-separated tool ids: {', '.join(TOOLS)}")
-    create.add_argument("--plugins-from", type=Path)
+    create.add_argument("--pinned-from", type=Path, help=pinned_help)
 
     refresh = commands.add_parser("update", help="update an existing vault")
     refresh.add_argument("vault", type=Path)
     refresh.add_argument("--dry-run", action="store_true")
     refresh.add_argument("--tools", help=f"comma-separated tool ids: {', '.join(TOOLS)}")
-    refresh.add_argument("--plugins-from", type=Path)
+    refresh.add_argument("--pinned-from", type=Path, help=pinned_help)
     return parser
 
 
@@ -673,20 +669,20 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_output()
     try:
         args = build_parser().parse_args(argv)
-        plugins_from = args.plugins_from.expanduser() if args.plugins_from is not None else None
+        pinned_from = args.pinned_from.expanduser() if args.pinned_from is not None else None
         if args.command == "install":
             if args.tools is None:
                 raise InstallError("install needs --tools (e.g. --tools claude-code)")
             install(
                 args.folder.expanduser(),
                 parse_tools(args.tools),
-                plugins_from=plugins_from,
+                pinned_from=pinned_from,
                 pins=load_pins(),
                 today=date.today(),
             )
         else:
             tools = parse_tools(args.tools) if args.tools is not None else None
-            update(args.vault.expanduser(), args.dry_run, tools, plugins_from)
+            update(args.vault.expanduser(), args.dry_run, tools, pinned_from)
     except (InstallError, OSError) as error:
         print(f"install.py: {error}", file=sys.stderr)
         return 1

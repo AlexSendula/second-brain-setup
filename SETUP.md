@@ -65,8 +65,7 @@ Get the newest release of the kit. Never use the `main` branch.
 1. Run `git ls-remote --tags https://github.com/AlexSendula/second-brain-setup`. This only reads the tag list. Skip the lines that end in `^{}`. Take the highest version tag, such as `0.1.0`. Compare the parts as numbers.
 2. Before anything is downloaded, ask the person **Install now?** Name what the install fetches:
    - the kit, release `<tag>`, from https://github.com/AlexSendula/second-brain-setup
-   - the Tasks plugin 8.5.0, from https://github.com/obsidian-tasks-group/obsidian-tasks
-   - Ninja Board 1.0.2, from https://github.com/AlexSendula/ninja-board (its five dashboard notes come from the same release)
+   - Ninja Board's five dashboard notes, from the Ninja Board 1.0.2 release, https://github.com/AlexSendula/ninja-board
    - Python 3.14, which uv downloads into its own folder the first time it needs it
 
    Go on only on a yes. If the answer is no, say what is still missing, and stop.
@@ -100,16 +99,41 @@ Open Obsidian:
 - macOS: run `open -a Obsidian`.
 - Windows: run `start "" obsidian://` in cmd. From another shell, run `cmd /c start "" obsidian://`.
 
-Then tell the person the two clicks that stay with them:
+Then tell the person the one click that stays with them: click **Open folder as vault**, then choose the vault folder. No other dialog appears.
 
-1. Click **Open folder as vault**, then choose the vault folder.
-2. Click **Trust author and enable plugins**.
+Tell the person that Today says "Unknown view type: ninja-board-today". That is expected. It goes away after Ninja Board is installed and Obsidian is restarted, in step 9.
 
-The first time, Obsidian may not show Today. It may show an error instead. Obsidian applies the start page only when the app starts. So tell the person to quit Obsidian once and open it again. On macOS, the person presses Cmd+Q. On Windows, they close the window. From then on, Obsidian opens on Today.
+## 9. Install the two plugins
 
-Today opens.
+The vault is set up for two Obsidian plugins, Tasks and Ninja Board, but their code is not in it yet. Tell the person that both come from Obsidian's community plugins, that Obsidian keeps them up to date, and that Tasks needs no settings because the kit already set them.
 
-## 9. Hand over
+Ask the person: do they want to install Tasks and Ninja Board in Obsidian themselves, or should you do it? Their choice is the yes for the installs in this step. Follow the way they choose.
+
+**The person does it:**
+
+1. Tell the person to open Settings → Community plugins in Obsidian and click **Turn on community plugins**.
+2. Open Tasks' page in Obsidian:
+   - macOS: run `open "obsidian://show-plugin?id=obsidian-tasks-plugin"`.
+   - Windows: run `start "" "obsidian://show-plugin?id=obsidian-tasks-plugin"` in cmd. From another shell, run `cmd /c start "" "obsidian://show-plugin?id=obsidian-tasks-plugin"`.
+3. Tell the person to click **Install**, then **Enable**.
+4. Do the same for Ninja Board. Its page is `obsidian://show-plugin?id=ninja-board`.
+
+**The agent does it**, through Obsidian's command line interface:
+
+1. Tell the person to turn on Settings → General → Advanced → **Command line interface**. If Obsidian offers to register it in the terminal, the person may skip that. If the setting is not there, Obsidian is older than 1.12.4. Use the person's way instead.
+2. Find the command, called `<obsidian>` below. Use `obsidian` if it is on the PATH (macOS: `command -v obsidian`; Windows: `where.exe obsidian`). If not, on macOS use `/Applications/Obsidian.app/Contents/MacOS/Obsidian`. On Windows, Obsidian is normally at `%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe` in cmd, and `$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe` in PowerShell. Write out the real folder, and wrap the full path in double quotes wherever `<obsidian>` is used, because a user name can contain spaces. In PowerShell, put `& ` before the quoted path. This has not been tested on Windows.
+3. Run these from the vault folder. In that folder, the command targets that vault:
+   - `<obsidian> plugins:restrict off`
+   - `<obsidian> plugin:install id=obsidian-tasks-plugin enable`
+   - `<obsidian> plugin:install id=ninja-board enable`
+4. Then always run `<obsidian> plugins:enabled filter=community versions`, and check that `obsidian-tasks-plugin` and `ninja-board` are both listed, each with a version number. An id without a version is switched on but not installed yet. An install can print nothing even when it worked.
+5. Ignore lines such as `Loading updated app package …` and `Your Obsidian installer is out of date …`. They are not errors. If a command says the command line interface is not enabled, ask the person to turn it on. If the two plugins are still not both listed, switch to the person's way.
+
+**Both ways:** tell the person to quit Obsidian once and open it again. Obsidian applies the start page only when the app starts, and a Today tab that was open before the install keeps the "Unknown view type" message until then. On macOS, the person presses Cmd+Q. On Windows, they close the window. From then on, Obsidian opens on Today, with its board.
+
+To check that Tasks is set up, the person can open the Guide board. Its Setup tile shows four OK lines.
+
+## 10. Hand over
 
 Tell the person how to start their agent inside the vault. From now on, always start the agent in the vault folder.
 

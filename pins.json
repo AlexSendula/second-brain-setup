@@ -1,43 +1,6 @@
 {
-  "obsidian-tasks-plugin": {
-    "version": "8.5.0",
-    "in_directory": true,
-    "files": {
-      "main.js": {
-        "url": "https://github.com/obsidian-tasks-group/obsidian-tasks/releases/download/8.5.0/main.js",
-        "sha256": "f901cc5537518787cd07db251d8b0db43491a127440d1b415f9cae950fbb587b"
-      },
-      "manifest.json": {
-        "url": "https://github.com/obsidian-tasks-group/obsidian-tasks/releases/download/8.5.0/manifest.json",
-        "sha256": "1920ee9d69357bdc4685becf9738da59a43132a57edf2ef4cf06ec62f2445eff"
-      },
-      "styles.css": {
-        "url": "https://github.com/obsidian-tasks-group/obsidian-tasks/releases/download/8.5.0/styles.css",
-        "sha256": "1e2cbfff193a8086c07219b140fb52782348a7cf037ea101d8a5e5e92f7093b9"
-      }
-    }
-  },
-  "ninja-board": {
-    "version": "1.0.2",
-    "in_directory": false,
-    "files": {
-      "main.js": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/main.js",
-        "sha256": "a7475ef39571db6205127431c58e5f4c9ab3dd9dc2085021d42a0b29b5e9671b"
-      },
-      "manifest.json": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/manifest.json",
-        "sha256": "ec10981424f2840109b0253c625f221fe61f213318dc59748a1053be83d60e77"
-      },
-      "styles.css": {
-        "url": "https://github.com/AlexSendula/ninja-board/releases/download/1.0.2/styles.css",
-        "sha256": "cb97dbfe7f2330bbbbec2c313013263ccc152c058b34417470275e8e5208bae3"
-      }
-    }
-  },
   "ninja-board-dashboards": {
     "version": "1.0.2",
-    "in_directory": false,
     "install_to": "01 Dashboard",
     "files": {
       "01 Today.md": {

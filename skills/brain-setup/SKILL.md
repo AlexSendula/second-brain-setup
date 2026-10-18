@@ -61,11 +61,14 @@ First, check git and uv, as in "Check git and uv" above.
    - `remove`: a system file the new version no longer has is removed, if you have not edited it.
    - `keep-aside`: you edited this system file, so your copy is kept as `<file>.mine` beside the new one.
    - `dashboard`: a new dashboard note is added. Existing dashboards are never changed.
-   - `plugin`: a plugin is updated to a new version.
    - `tool`: an agent tool's files are added.
    - `version`: the system version in config changes.
    - `migration: none`: no notes change.
    Say that the update never changes the person's rules, their own skills or their notes. It changes the version numbers and the list of agent tools in config. System files such as `AGENTS.md`, `.claude/settings.json` and `.vscode/settings.json` can be replaced, or kept aside as `<file>.mine` when the person edited them.
+   Also explain these, when they apply:
+   - An update from 0.1.x moves Claude Code's file to `.claude/CLAUDE.md`. For an unedited `CLAUDE.md`, the list shows `add .claude/CLAUDE.md` and `remove CLAUDE.md`. If the person edited it, the list shows only the add, and the root `CLAUDE.md` stays; they can move their edits into the new file.
+   - The update adds the `hide-agent-files` snippet. The person turns it on in Settings → Appearance → CSS snippets, and then `AGENTS.md` no longer shows in Obsidian's file list.
+   - An update never installs or updates plugins. Obsidian does: Settings → Community plugins → Check for updates.
 7. Ask whether to apply the update. Wait for a yes. The update saves a version before it changes anything, and another after. To undo it, run `git revert --no-edit HEAD` in the vault. That saves a new version which undoes the update. Never use `git reset --hard`.
 8. On a yes, run the update for real: `uv run "<kit folder>/install.py" update .` If the run ends with a line that starts with `install.py:`, the update failed. Show that line to the person. Running the same update again is safe. The line `already up to date` means there is nothing to do.
 9. Run the check: `uv run .agents/skills/brain/scripts/brain.py check`. Until the tool exists, skip this step and say so.

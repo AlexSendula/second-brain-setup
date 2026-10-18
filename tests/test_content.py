@@ -50,7 +50,7 @@ class InstalledVaultTests(unittest.TestCase):
         patch.start()
         cls.addClassCleanup(patch.stop)
         cls.vault = Path(tmp.name) / "vault"
-        install.install(cls.vault, ["claude-code", "codex"], plugins_from=None, pins={}, today=TODAY)
+        install.install(cls.vault, ["claude-code", "codex"], pinned_from=None, pins={}, today=TODAY)
 
     def test_every_type_definition_parses(self):
         paths = sorted((self.vault / SYSTEM / "types").glob("*.md"))
@@ -149,12 +149,27 @@ class KitTextTests(unittest.TestCase):
         text = (install.KIT_ROOT / "SETUP.md").read_text(encoding="utf-8")
         for phrase in (
             "0.9.0", "1.10.2", "xcode-select --install", "winget install --id Git.Git -e",
-            "Trust author and enable plugins", "brain-setup/SKILL.md", "OneDrive", "--depth 1 --branch",
+            "brain-setup/SKILL.md", "OneDrive", "--depth 1 --branch",
             "2.28 or newer", "--accept-package-agreements", "drag it to Applications", "--tools none",
-            "answer yes", "quit", "its five dashboard notes come from the same release",
+            "answer yes", "quit", "Ninja Board's five dashboard notes",
+            "Open folder as vault", "Unknown view type: ninja-board-today", "show-plugin?id=obsidian-tasks-plugin",
+            "show-plugin?id=ninja-board", "Command line interface", "plugins:restrict off",
+            "plugin:install id=obsidian-tasks-plugin enable", "plugin:install id=ninja-board enable",
+            "plugins:enabled filter=community versions", "where.exe obsidian", "The agent does it",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        self.assertNotIn("Trust author", text)  # no plugin code in the vault, so Obsidian shows no such dialog
+
+    def test_brain_setup_skill_explains_the_update(self):
+        text = (install.SKILLS / "brain-setup" / "SKILL.md").read_text(encoding="utf-8")
+        for phrase in (
+            "add .claude/CLAUDE.md", "remove CLAUDE.md", "hide-agent-files", "CSS snippets", "Check for updates",
+            "SETUP.md` and continue from step 7",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+        self.assertNotIn("`plugin`", text)  # the update has no plugin action any more
 
 
 if __name__ == "__main__":
