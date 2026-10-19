@@ -19,11 +19,13 @@ def isolated_git_env(tmp: Path) -> dict[str, str]:
 
 
 def fake_dashboard(name: str) -> bytes:
-    """A small dashboard note: frontmatter with a created line, then a base block."""
+    """A small dashboard note as Ninja Board 1.1.1 ships it: a created line, the board-page class, a base block."""
     text = (
         "---\n"
         "type: note\n"
         "created: 2020-01-01\n"
+        "cssclasses:\n"
+        "  - ninja-board\n"
         "---\n"
         "\n"
         "```base\n"

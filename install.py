@@ -46,6 +46,8 @@ CONFIG = "99 System/config.md"
 CLAUDE_SKILLS = ".claude/skills"  # the link Claude Code reads; it points at .agents/skills
 HIDE_SNIPPET = ".obsidian/snippets/hide-agent-files.css"  # hides AGENTS.md from Obsidian's file list
 FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)  # CRLF too: Windows editors save that way
+BOARD_CLASS = ("cssclasses:", "  - ninja-board")  # Ninja Board 1.1.1 opens a note with this as a board page
+BOARD_NOTE = "adds cssclasses: ninja-board to its frontmatter and nothing else, so Ninja Board 1.1.1 opens it as a board page"
 
 
 class InstallError(Exception):
@@ -382,7 +384,7 @@ def install(target: Path, tools: list[str], *, pinned_from: Path | None, pins: d
 class Change:
     """One step of an update. note is printed after the path and may be empty."""
 
-    action: str  # add, replace, remove, keep-aside, dashboard, tool or version
+    action: str  # add, replace, remove, keep-aside, dashboard, mark, tool or version
     path: str
     note: str = ""
     seen: str = ""  # the sha of the vault file when the plan was made; "" when it was missing
@@ -463,6 +465,30 @@ def _dated_note(data: bytes, rel: str, day: str) -> bytes:
     return set_frontmatter_line(data.decode("utf-8"), "created", day, rel).encode("utf-8")
 
 
+def mark_board_page(text: str) -> str | None:
+    """The note with cssclasses: ninja-board added to its frontmatter, right after the created line, or last in the
+    frontmatter without one. Every other byte stays. None when the note has no frontmatter or already has a
+    cssclasses key: whatever that holds, the person chose it."""
+    match = FRONTMATTER.match(text)
+    if match is None or re.search(r"""(?m)^(?:"cssclasses"|'cssclasses'|cssclasses)[ \t]*:""", match.group(1)):
+        return None
+    block = match.group(1)
+    created = re.search(r"(?m)^created:[^\r\n]*", block)
+    at = created.end() if created else len(block)
+    eol = "\r\n" if text.startswith("\r\n", match.start(1) + at) else "\n"  # the ending of the line it follows
+    block = block[:at] + eol + eol.join(BOARD_CLASS) + block[at:]
+    return text[: match.start(1)] + block + text[match.end(1) :]
+
+
+def _marked_note(data: bytes) -> bytes | None:
+    """mark_board_page for a note's bytes. A note that is not UTF-8 is left alone."""
+    try:
+        marked = mark_board_page(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return None
+    return None if marked is None else marked.encode("utf-8")
+
+
 def _has_own_repo(vault: Path) -> bool:
     """True when git's top folder for the vault is the vault itself. An empty .git folder, or none, is not one."""
     if not vault.is_dir():
@@ -521,9 +547,14 @@ def plan_update(vault: Path, *, tools: list[str] | None, pins: dict) -> list[Cha
             changes.append(Change("remove", rel, note, seen=listed[rel]))
     if "claude-code" in new_tools and not os.path.lexists(vault / CLAUDE_SKILLS):
         changes.append(Change("add", CLAUDE_SKILLS, "link to .agents/skills"))
-    for rel in sorted(_note_sources(pins)):  # the pinned notes the vault lacks; an existing note is never rewritten
-        if not (vault / rel).exists():
+    for rel in sorted(_note_sources(pins)):  # a pinned note the vault lacks is added; an existing one is not rewritten
+        note = vault / rel
+        if not note.exists():
             changes.append(Change("dashboard", rel))
+        elif note.is_file():
+            data = note.read_bytes()
+            if _marked_note(data) is not None:  # the one exception: a note without cssclasses gets the board class
+                changes.append(Change("mark", rel, BOARD_NOTE, seen=_sha256(data)))
     return changes
 
 
@@ -540,7 +571,9 @@ def _write_checked(target: Path, new: bytes, change: Change) -> None:
         return  # already the kit's content
     if change.action == "dashboard" and current is not None:
         return  # an existing dashboard is never rewritten
-    if change.action == "replace" and current is not None and _sha256(current) == change.seen:
+    if change.action == "mark" and current is None:
+        return  # the person removed it since the plan
+    if change.action in ("replace", "mark") and current is not None and _sha256(current) == change.seen:
         target.write_bytes(new)  # unchanged since the plan
         return
     if current is not None:  # edited since the plan, or planned as a keep-aside
@@ -583,6 +616,7 @@ def apply_update(vault: Path, changes: list[Change], *, pinned_from: Path | None
         staged = Path(staging)
         sources = _note_sources(pins)
         dashboards = {}  # every note is built before the first write, so a bad pin writes no note at all
+        marked = {}  # the notes that get the board class, built from what the vault holds now
         if any(change.action == "dashboard" for change in changes):  # all pinned files are fetched and checked
             for warning in fetch_pinned(pins, pinned_from, staged):
                 print(f"install.py: warning: {warning}", file=sys.stderr)
@@ -591,6 +625,10 @@ def apply_update(vault: Path, changes: list[Change], *, pinned_from: Path | None
                 pin_id, name = sources[change.path]
                 data = (staged / pin_id / name).read_bytes()
                 dashboards[change.path] = _dated_note(data, change.path, values["today"])
+            elif change.action == "mark" and (vault / change.path).is_file():
+                new = _marked_note((vault / change.path).read_bytes())
+                if new is not None:  # None: the person gave it a cssclasses key since the plan
+                    marked[change.path] = new
         for change in changes:
             target = vault / change.path
             if change.action == "remove":
@@ -601,6 +639,9 @@ def apply_update(vault: Path, changes: list[Change], *, pinned_from: Path | None
                     link_dir(target, vault / ".agents" / "skills")
             elif change.action == "dashboard":  # an existing note is kept; a missing one is created exclusively
                 _write_checked(target, dashboards[change.path], change)
+            elif change.action == "mark":
+                if change.path in marked:
+                    _write_checked(target, marked[change.path], change)
             elif change.path in contents:
                 _write_checked(target, contents[change.path], change)
 

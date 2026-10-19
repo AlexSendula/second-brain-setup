@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,8 @@ import install
 from helpers import DASHBOARD_ID, DASHBOARD_NAMES, fake_pins, isolated_git_env
 
 TODAY = date(2026, 10, 16)
+PINNED_FROM = Path(__file__).resolve().parent / "fixtures" / "pinned-from"  # the pinned notes, as <id>/<file>
+BOARD_CLASS = b"cssclasses:\n  - ninja-board\n"
 CLAUDE_FILE = "@../AGENTS.md\n@../.memory/MEMORY.md\n"  # imports in .claude/CLAUDE.md are relative to that file
 
 
@@ -442,7 +445,7 @@ class FetchPinnedTests(unittest.TestCase):
 
 
 class DashboardTests(unittest.TestCase):
-    """The five dashboard notes come from the pinned Ninja Board release. The kit carries no copy of them."""
+    """The five dashboard notes come from the pinned Ninja Board release. tests/fixtures holds a byte copy for the tests."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -492,15 +495,36 @@ class DashboardTests(unittest.TestCase):
         pins = install.load_pins()
         self.assertEqual(list(pins), [DASHBOARD_ID])  # the kit pins notes only: Obsidian installs the plugins
         entry = pins[DASHBOARD_ID]
-        self.assertEqual(entry["version"], "1.0.2")
+        self.assertEqual(entry["version"], "1.1.1")
         self.assertEqual(sorted(entry), ["files", "install_to", "version"])
         self.assertEqual(entry["install_to"], "01 Dashboard")
         self.assertEqual(sorted(entry["files"]), sorted(DASHBOARD_NAMES))
         for name, pin in entry["files"].items():
             with self.subTest(note=name):
-                url = "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/"
+                url = "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/"
                 self.assertEqual(pin["url"], url + name.replace(" ", "%20"))
                 self.assertRegex(pin["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_the_pins_match_the_bytes_of_the_pinned_dashboards(self):
+        # tests/fixtures holds the five notes byte for byte, as Ninja Board's tag 1.1.1 holds them in
+        # sample-vault/01 Dashboard. KIT_ONLINE=1 checks the pins against GitHub itself.
+        files = install.load_pins()[DASHBOARD_ID]["files"]
+        self.assertEqual(sorted(path.name for path in (PINNED_FROM / DASHBOARD_ID).iterdir()), sorted(files))
+        for name, pin in files.items():
+            with self.subTest(note=name):
+                data = (PINNED_FROM / DASHBOARD_ID / name).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), pin["sha256"])
+
+    def test_install_with_the_real_pins_writes_the_pinned_bytes_with_the_class_and_created_set(self):
+        target = self.tmp / "v"
+        install.install(target, ["codex"], pinned_from=PINNED_FROM, pins=install.load_pins(), today=TODAY)
+        for name in DASHBOARD_NAMES:
+            with self.subTest(note=name):
+                pinned = (PINNED_FROM / DASHBOARD_ID / name).read_bytes()
+                written = (target / "01 Dashboard" / name).read_bytes()
+                dated = re.sub(rb"(?m)^created: \d{4}-\d\d-\d\d$", b"created: 2026-10-16", pinned, count=1)
+                self.assertEqual(written, dated)  # only the created line differs from the pinned bytes
+                self.assertIn(b"\ncreated: 2026-10-16\n" + BOARD_CLASS + b"---\n", written)
 
 
 class DownloadTests(unittest.TestCase):

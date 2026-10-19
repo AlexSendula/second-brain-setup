@@ -60,11 +60,12 @@ First, check git and uv, as in "Check git and uv" above.
    - `replace`: a system file you have not edited is replaced with the new version.
    - `remove`: a system file the new version no longer has is removed, if you have not edited it.
    - `keep-aside`: you edited this system file, so your copy is kept as `<file>.mine` beside the new one.
-   - `dashboard`: a new dashboard note is added. Existing dashboards are never changed.
+   - `dashboard`: a new dashboard note is added. An existing dashboard is never rewritten.
+   - `mark`: an existing dashboard note that has no `cssclasses` property gets `cssclasses: ninja-board` added. That marks it as a board page, so Ninja Board opens it read-only and shows only the board, without its Properties and title. Nothing else in the note changes, and a dashboard that already has `cssclasses` is left alone.
    - `tool`: an agent tool's files are added.
    - `version`: the system version in config changes.
-   - `migration: none`: no notes change.
-   Say that the update never changes the person's rules, their own skills or their notes. It changes the version numbers and the list of agent tools in config. System files such as `AGENTS.md`, `.claude/settings.json` and `.vscode/settings.json` can be replaced, or kept aside as `<file>.mine` when the person edited them.
+   - `migration: none`: no note needs converting to a new format.
+   Say that the update never changes the person's rules, their own skills or their notes, except for the one property `mark` adds to a dashboard. It changes the version numbers and the list of agent tools in config. System files such as `AGENTS.md`, `.claude/settings.json` and `.vscode/settings.json` can be replaced, or kept aside as `<file>.mine` when the person edited them.
    Also explain these, when they apply:
    - An update from 0.1.x moves Claude Code's file to `.claude/CLAUDE.md`. For an unedited `CLAUDE.md`, the list shows `add .claude/CLAUDE.md` and `remove CLAUDE.md`. If the person edited it, the list shows only the add, and the root `CLAUDE.md` stays; they can move their edits into the new file.
    - The update adds the `hide-agent-files` snippet. The person turns it on in Settings → Appearance → CSS snippets, and then `AGENTS.md` no longer shows in Obsidian's file list.
@@ -72,7 +73,7 @@ First, check git and uv, as in "Check git and uv" above.
 7. Ask whether to apply the update. Wait for a yes. The update saves a version before it changes anything, and another after. To undo it, run `git revert --no-edit HEAD` in the vault. That saves a new version which undoes the update. Never use `git reset --hard`.
 8. On a yes, run the update for real: `uv run "<kit folder>/install.py" update .` If the run ends with a line that starts with `install.py:`, the update failed. Show that line to the person. Running the same update again is safe. The line `already up to date` means there is nothing to do.
 9. Run the check: `uv run .agents/skills/brain/scripts/brain.py check`. Until the tool exists, skip this step and say so.
-10. Summarize in plain words: what was added, replaced and kept aside, where any `.mine` copies are, and the new version.
+10. Summarize in plain words: what was added, replaced, marked and kept aside, where any `.mine` copies are, and the new version.
 
 ## Add a tool
 

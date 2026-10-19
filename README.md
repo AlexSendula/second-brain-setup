@@ -2,7 +2,7 @@
 
 Second Brain Setup gives you a second brain on your computer: an Obsidian vault of plain notes for your tasks, projects, people and plans, kept with your AI agent. You say one sentence to your agent, and it does the setup.
 
-This is version 1.0.1. It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
+This is version 1.0.2. It has been tested by hand on macOS with Claude Code. Windows is covered by automated tests, but has not been tried by hand yet.
 
 ## Install
 
@@ -33,7 +33,7 @@ Before it downloads anything, your agent names each item and waits for your yes.
 - **The vault:** a new folder, `~/Documents/second-brain` by default, with the folders from `01 Dashboard` to `99 System`. If iCloud or OneDrive syncs your Documents folder, the agent suggests `~/second-brain` instead, since sync and git don't mix well.
 - **What your agent follows:** `AGENTS.md`, the rules and settings in `99 System/`, and two agent skills, `brain-setup` and `brain`. Claude Code and VS Code get their own files, such as `.claude/CLAUDE.md` for Claude Code. Codex gets none.
 - **Agent files out of sight:** in Obsidian, `AGENTS.md` is hidden from the file list by a CSS snippet, `hide-agent-files`. To show it again, turn the snippet off under Settings → Appearance → CSS snippets.
-- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) and [Ninja Board](https://github.com/AlexSendula/ninja-board) come from Obsidian's community plugins, and Obsidian updates them. The kit sets up Tasks' settings and adds Ninja Board's five boards (dashboard notes), from Ninja Board 1.0.2. After you install the plugins and restart Obsidian once, it opens on Today.
+- **Two Obsidian plugins:** [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) and [Ninja Board](https://github.com/AlexSendula/ninja-board) come from Obsidian's community plugins, and Obsidian updates them. The kit sets up Tasks' settings and adds Ninja Board's five boards (dashboard notes), from Ninja Board 1.1.1. Each board note carries the property `cssclasses: ninja-board`. It marks the note as a board page: Ninja Board opens it read-only and hides its Properties and title, so the page shows only the board. After you install the plugins and restart Obsidian once, it opens on Today.
 - **Python 3.14**, which uv downloads into its own folder the first time.
 - **A git repository** in the vault, with a first saved version.
 
@@ -56,7 +56,7 @@ update my brain
 
 It finds the newest release, tells you where it comes from, shows what would change, and applies it only after your yes.
 
-- An update never changes your notes or your rules.
+- An update never changes your notes or your rules, with one exception: a board note in `01 Dashboard` that has no `cssclasses` property gets `cssclasses: ninja-board` added, and nothing else in it changes. A note that already has `cssclasses` is left alone.
 - An update never installs or updates plugins. Obsidian does that: Settings → Community plugins → Check for updates.
 - A system file you edited, such as `AGENTS.md`, is kept beside the new one as `<file>.mine`.
 - The update saves a version before and after. To undo it, run this in the vault:

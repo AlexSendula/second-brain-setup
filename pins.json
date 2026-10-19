@@ -1,27 +1,27 @@
 {
   "ninja-board-dashboards": {
-    "version": "1.0.2",
+    "version": "1.1.1",
     "install_to": "01 Dashboard",
     "files": {
       "01 Today.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/01%20Today.md",
-        "sha256": "76c1e4bca922bf54b3ec603743d2a131178b2188525430d2ed12278cfa97f0db"
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/01%20Today.md",
+        "sha256": "d20d0a5ebbef56909d86a323ab8db743853bab0794ace476d934fffd49002dcf"
       },
       "02 Week.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/02%20Week.md",
-        "sha256": "334f8ed16ed9a73ceee4fcca080135aa712efdee0d28b42ec63670c01c0ab7b6"
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/02%20Week.md",
+        "sha256": "199fac57434e64b95c0156549c6d612c87dd78a0554a8e4e9c4154aa26c930a1"
       },
       "03 Projects.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/03%20Projects.md",
-        "sha256": "b304e0f8e30136dd9584254b5fec32529173e15b1a8080c88267d062a22c3343"
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/03%20Projects.md",
+        "sha256": "00538e38dfbd66524526063baea5dde38312dc6dc130a3367a009cbdd29b37a6"
       },
       "04 Backlog.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/04%20Backlog.md",
-        "sha256": "190e41246afe1e0ee089f92db3f81add7d29e4c7fb64ec50fbd8b06a6dec526b"
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/04%20Backlog.md",
+        "sha256": "84d51b1437ab6cc32afb2664fd5756d866ed1db80661b23148dc438fccf17d89"
       },
       "05 Guide.md": {
-        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.0.2/sample-vault/01%20Dashboard/05%20Guide.md",
-        "sha256": "cb55747419154ec8d849ae36811523bea73b44af9f6b0c25b6c646f49d26187e"
+        "url": "https://raw.githubusercontent.com/AlexSendula/ninja-board/1.1.1/sample-vault/01%20Dashboard/05%20Guide.md",
+        "sha256": "08946260322b751de9c6f664b81255940b6039226a3b4ee494b2927fd64b824e"
       }
     }
   }

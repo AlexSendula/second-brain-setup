@@ -3,6 +3,7 @@
 import contextlib
 import hashlib
 import io
+import json
 import os
 import re
 import shutil
@@ -15,8 +16,8 @@ from unittest import mock
 import yaml
 
 import install
-from helpers import DASHBOARD_ID, fake_pins
-from test_install import TODAY, git_run, isolate_git
+from helpers import DASHBOARD_ID, DASHBOARD_NAMES, fake_pins
+from test_install import BOARD_CLASS, PINNED_FROM, TODAY, git_run, isolate_git
 
 AGENTS = "AGENTS.md"
 CLAUDE = ".claude/CLAUDE.md"
@@ -25,6 +26,7 @@ CONFIG = "99 System/config.md"
 V = install.kit_version()
 WEEK = "01 Dashboard/02 Week.md"
 BACKLOG = "01 Dashboard/04 Backlog.md"
+MARK_NOTE = "adds cssclasses: ninja-board to its frontmatter and nothing else, so Ninja Board 1.1.1 opens it as a board page"
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
 
@@ -56,6 +58,11 @@ def agent_tools(vault: Path) -> list[str]:
 def crlf(data: bytes) -> bytes:
     """The bytes as a Windows editor saves them. Written as bytes, so macOS and Windows run the same test."""
     return data.replace(b"\n", b"\r\n")
+
+
+def mark_line(rel: str) -> str:
+    """The plan line for a dashboard that update marks as a board page."""
+    return f"mark  {rel}  {MARK_NOTE}\n"
 
 
 def set_version(config: str, version: str) -> str:
@@ -280,6 +287,290 @@ class ConfigAndDashboardTests(UpdateTestCase):
                 self.assertEqual(code, 1)
                 self.assertIn("'ninja-board' has no install_to", err)
         self.assertEqual(snapshot(self.vault), before)
+
+
+class BoardPageTests(UpdateTestCase):
+    """An existing dashboard is never rewritten. The one exception: a dashboard with no cssclasses key gets
+    cssclasses: ninja-board right after its created line, so Ninja Board 1.1.1 opens it as a board page."""
+
+    created = f"created: {TODAY.isoformat()}\n".encode()  # install_vault dates the notes TODAY
+
+    def unmark(self, rel: str) -> bytes:
+        """Put an installed dashboard back as kit 1.0.1 left it, without cssclasses. Return its bytes."""
+        note = self.vault / rel
+        data = note.read_bytes()
+        self.assertIn(BOARD_CLASS, data)
+        note.write_bytes(data.replace(BOARD_CLASS, b""))
+        return note.read_bytes()
+
+    def edit(self, rel: str, old: str, new: str) -> bytes:
+        """Replace text in a dashboard, as the person would arranging the board. Return its bytes."""
+        note = self.vault / rel
+        text = note.read_text(encoding="utf-8")
+        self.assertIn(old, text)
+        note.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+        return note.read_bytes()
+
+    def marked(self, data: bytes) -> bytes:
+        """data with the class right after its created line."""
+        return data.replace(self.created, self.created + BOARD_CLASS, 1)
+
+    def test_update_marks_a_dashboard_without_cssclasses_and_changes_nothing_else(self):
+        self.install_vault()
+        self.edit(WEEK, "    name: 02 Week.md\n", "    name: 02 Week.md\n    order: [b, a]\n    folded: true\n")
+        before = self.unmark(WEEK)
+        others = {rel: data for rel, data in files_outside_git(self.vault).items() if rel != WEEK}
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, mark_line(WEEK) + "migration: none\n")
+        after = (self.vault / WEEK).read_bytes()
+        self.assertEqual(after, self.marked(before))
+        self.assertEqual(after.replace(BOARD_CLASS, b"", 1), before)  # the two lines are all that was added
+        self.assertIn(b"\n" + self.created + BOARD_CLASS + b"---\n", after)
+        self.assertIn(b"    order: [b, a]\n    folded: true\n", after)  # the person's arrangement and folds
+        self.assertEqual({rel: data for rel, data in files_outside_git(self.vault).items() if rel != WEEK}, others)
+        self.assertEqual(git_run(self.vault, "status", "--porcelain").stdout, "")
+        self.assertEqual(run_cli("update", str(self.vault))[1], "already up to date\nmigration: none\n")
+
+    def test_marking_the_notes_of_the_last_release_gives_the_pinned_notes_byte_for_byte(self):
+        # The real pins and the real 1.1.1 notes, not the fakes. setUp has patched load_pins, so read the file.
+        pins = json.loads((install.KIT_ROOT / "pins.json").read_text(encoding="utf-8"))
+        self.patch(install, "load_pins", lambda: pins)
+        install.install(self.vault, ["codex"], pinned_from=PINNED_FROM, pins=pins, today=TODAY)
+        installed = {}
+        for name in DASHBOARD_NAMES:
+            note = self.vault / "01 Dashboard" / name
+            installed[note] = note.read_bytes()
+            note.write_bytes(self.unmark(f"01 Dashboard/{name}"))  # as the 1.0.2 notes were: no cssclasses
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "".join(mark_line(f"01 Dashboard/{name}") for name in DASHBOARD_NAMES)
+                         + "migration: none\n")
+        for note, data in installed.items():
+            with self.subTest(note=note.name):
+                self.assertEqual(note.read_bytes(), data)
+
+    def test_every_dashboard_without_cssclasses_gets_its_own_plan_line(self):
+        self.install_vault()
+        for name in DASHBOARD_NAMES:
+            self.unmark(f"01 Dashboard/{name}")
+        code, out, err = run_cli("update", str(self.vault), "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "".join(mark_line(f"01 Dashboard/{name}") for name in DASHBOARD_NAMES)
+                         + "migration: none\n")
+
+    def test_the_class_goes_right_after_the_created_line_even_when_other_keys_follow_it(self):
+        self.install_vault()
+        note = self.vault / WEEK
+        note.write_bytes(b"---\ntype: note\ncreated: 2026-10-16\narrange: today\nowner: me\n---\n\nmy board\n")
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(note.read_bytes(), b"---\ntype: note\ncreated: 2026-10-16\n" + BOARD_CLASS
+                         + b"arrange: today\nowner: me\n---\n\nmy board\n")
+
+    def test_the_class_goes_at_the_end_of_the_frontmatter_when_there_is_no_created_line(self):
+        self.install_vault()
+        note = self.vault / WEEK
+        note.write_bytes(b"---\ntype: note\narrange: today\n---\n\nmy board\n")
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertIn(mark_line(WEEK), out)
+        self.assertEqual(note.read_bytes(), b"---\ntype: note\narrange: today\n" + BOARD_CLASS + b"---\n\nmy board\n")
+
+    def test_a_crlf_dashboard_is_marked_with_crlf_and_nothing_else_changes(self):
+        self.install_vault()
+        before = crlf(self.unmark(WEEK))
+        (self.vault / WEEK).write_bytes(before)
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.vault / WEEK).read_bytes(), crlf(self.marked(before.replace(b"\r\n", b"\n"))))
+
+    def test_a_dashboard_with_its_own_cssclasses_key_is_left_alone_whatever_it_holds(self):
+        self.install_vault()
+        own = {
+            "01 Dashboard/01 Today.md": "cssclasses:\n  - wide-page\n",
+            WEEK: "cssclasses: [wide-page]\n",
+            "01 Dashboard/03 Projects.md": "cssclasses:\n",
+            BACKLOG: "cssclasses: wide-page\n",
+            "01 Dashboard/05 Guide.md": "cssclasses :  \n  - not-the-board\n",
+        }
+        for rel, lines in own.items():
+            self.edit(rel, "cssclasses:\n  - ninja-board\n", lines)
+        before = files_outside_git(self.vault)
+        for args in ((), ("--dry-run",)):
+            with self.subTest(args=args):
+                code, out, err = run_cli("update", str(self.vault), *args)
+                self.assertEqual(code, 0, err)
+                self.assertEqual(out, "already up to date\nmigration: none\n")
+        self.assertEqual(files_outside_git(self.vault), before)
+
+    def test_an_indented_cssclasses_line_is_not_the_notes_key(self):
+        self.install_vault()
+        self.unmark(WEEK)
+        self.edit(WEEK, "type: note\n", "type: note\nnested:\n  cssclasses: [other]\n")
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertIn(mark_line(WEEK), out)
+
+    def test_a_quoted_cssclasses_key_is_the_same_key(self):
+        for key in ('"cssclasses": [a]', "'cssclasses': x", '"cssclasses" : x'):
+            with self.subTest(key=key):
+                self.assertIsNone(install.mark_board_page(f"---\n{key}\ncreated: x\n---\n"))
+
+    def test_the_added_lines_take_the_ending_of_the_line_they_follow(self):
+        added = "cssclasses:{eol}  - ninja-board{eol}"
+        for text, eol in (
+            ("---\ntype: note\r\ncreated: x\r\n---\r\n", "\r\n"),  # LF first line, CRLF created line
+            ("---\r\ntype: note\ncreated: x\n---\n", "\n"),  # the reverse
+            ("---\r\ntype: note\ncreated: x\r\nother: y\n---\r\n", "\r\n"),  # follows created, not what comes after
+            ("---\r\ntype: note\n---\n", "\n"),  # no created line: follows the last key
+        ):
+            with self.subTest(text=text):
+                marked = install.mark_board_page(text)
+                self.assertIsNotNone(marked)
+                self.assertIn(added.format(eol=eol), marked)
+                self.assertEqual(marked.replace(added.format(eol=eol), "", 1), text)  # nothing else changed
+
+    def test_a_dashboard_without_frontmatter_is_left_alone(self):
+        self.install_vault()
+        for data in (b"my board, no frontmatter\n", b"---\ncreated: x\n", b"\xef\xbb\xbf---\ncreated: x\n---\n"):
+            with self.subTest(data=data):
+                (self.vault / WEEK).write_bytes(data)
+                code, out, err = run_cli("update", str(self.vault))
+                self.assertEqual(code, 0, err)
+                self.assertEqual(out, "already up to date\nmigration: none\n")
+                self.assertEqual((self.vault / WEEK).read_bytes(), data)
+
+    def test_a_dashboard_that_is_not_utf8_is_left_alone(self):
+        self.install_vault()
+        data = b"---\ncreated: x\n---\ncaf\xe9\n"
+        (self.vault / WEEK).write_bytes(data)
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.vault / WEEK).read_bytes(), data)
+
+    def test_only_the_pinned_dashboard_notes_are_marked(self):
+        self.install_vault()
+        plain = b"---\ntype: note\ncreated: x\n---\n"
+        for rel in ("01 Dashboard/06 Mine.md", "07 Resources/page.md"):
+            (self.vault / rel).write_bytes(plain)
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "already up to date\nmigration: none\n")
+        for rel in ("01 Dashboard/06 Mine.md", "07 Resources/page.md"):
+            self.assertEqual((self.vault / rel).read_bytes(), plain)
+
+    def test_dry_run_shows_the_line_and_writes_nothing(self):
+        self.install_vault()
+        self.unmark(WEEK)
+        git_run(self.vault, "add", "-A")
+        git_run(self.vault, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "unmarked")  # settles the index
+        before = snapshot(self.vault)
+        with mock.patch.object(install, "download") as download:
+            code, out, err = run_cli("update", str(self.vault), "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, mark_line(WEEK) + "migration: none\n")
+        download.assert_not_called()
+        self.assertEqual(snapshot(self.vault), before)
+        self.assertEqual(git_run(self.vault, "status", "--porcelain").stdout, "")
+
+    def test_marking_needs_no_download_and_leaves_the_kit_files_record_as_it_was(self):
+        self.install_vault()
+        self.unmark(WEEK)
+        record = (self.vault / install.KIT_FILES).read_bytes()
+        with mock.patch.object(install, "download") as download:
+            code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        download.assert_not_called()
+        self.assertEqual((self.vault / install.KIT_FILES).read_bytes(), record)  # a dashboard is not a kit file
+        self.assertNotIn("01 Dashboard", record.decode("utf-8"))
+
+    def test_the_record_is_right_when_a_mark_comes_with_other_kit_writes(self):
+        self.install_vault(("codex",))
+        self.unmark(WEEK)
+        copy = self.patch_template()
+        (copy / "vault" / AGENTS).write_text("new agents\n", encoding="utf-8")
+        code, out, err = run_cli("update", str(self.vault))
+        self.assertEqual(code, 0, err)
+        self.assertIn("replace  AGENTS.md\n", out)
+        self.assertIn(mark_line(WEEK), out)
+        listed = install.read_kit_files(self.vault)
+        self.assertEqual(listed[AGENTS], hashlib.sha256(b"new agents\n").hexdigest())
+        self.assertNotIn(WEEK, listed)
+        self.assertEqual(run_cli("update", str(self.vault))[1], "already up to date\nmigration: none\n")
+
+    def test_a_missing_dashboard_is_added_with_the_class_and_the_others_are_marked(self):
+        self.install_vault()
+        (self.vault / BACKLOG).unlink()
+        self.unmark(WEEK)
+        code, out, err = run_cli("update", str(self.vault), "--pinned-from", str(self.folder))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, mark_line(WEEK) + "dashboard  01 Dashboard/04 Backlog.md\nmigration: none\n")
+        self.assertEqual((self.vault / BACKLOG).read_bytes(), self.expected_note("04 Backlog.md"))
+        self.assertIn(BOARD_CLASS, (self.vault / BACKLOG).read_bytes())
+        self.assertIn(BOARD_CLASS, (self.vault / WEEK).read_bytes())
+
+
+class BoardPageRecheckTests(UpdateTestCase):
+    """The plan is made first; the person can edit before apply writes. The mark follows the checked-write rule:
+    an edit made in between is kept, never overwritten."""
+
+    def setUp(self):
+        super().setUp()
+        self.install_vault()
+        note = self.vault / WEEK
+        note.write_bytes(note.read_bytes().replace(BOARD_CLASS, b""))
+        self.before = note.read_bytes()
+
+    def plan(self):
+        return install.plan_update(self.vault, tools=None, pins=self.pins)
+
+    def apply(self, changes):
+        install.apply_update(self.vault, changes, pinned_from=self.folder, pins=self.pins)
+
+    def test_the_plan_has_the_mark_with_the_sha_it_saw(self):
+        self.assertEqual([(c.action, c.path, c.note, c.seen) for c in self.plan()],
+                         [("mark", WEEK, MARK_NOTE, hashlib.sha256(self.before).hexdigest())])
+
+    def test_an_unchanged_note_is_marked_in_place(self):
+        self.apply(self.plan())
+        self.assertEqual((self.vault / WEEK).read_bytes().replace(BOARD_CLASS, b"", 1), self.before)
+        self.assertIn(BOARD_CLASS, (self.vault / WEEK).read_bytes())
+        self.assertFalse((self.vault / (WEEK + ".mine")).exists())
+
+    def test_an_edit_made_since_the_plan_is_kept_and_the_note_is_still_marked(self):
+        changes = self.plan()
+        edited = self.before + b"\nmy new column\n"
+        (self.vault / WEEK).write_bytes(edited)
+        self.apply(changes)
+        self.assertEqual((self.vault / (WEEK + ".mine")).read_bytes(), edited)  # the person's file, as they left it
+        written = (self.vault / WEEK).read_bytes()
+        self.assertIn(b"my new column\n", written)
+        self.assertEqual(written.replace(BOARD_CLASS, b"", 1), edited)
+
+    def test_a_cssclasses_key_added_since_the_plan_is_left_alone(self):
+        changes = self.plan()
+        created = f"created: {TODAY.isoformat()}\n".encode()
+        own = self.before.replace(created, created + b"cssclasses: [mine]\n")
+        (self.vault / WEEK).write_bytes(own)
+        self.apply(changes)
+        self.assertEqual((self.vault / WEEK).read_bytes(), own)
+        self.assertFalse((self.vault / (WEEK + ".mine")).exists())
+
+    def test_a_note_the_person_deleted_since_the_plan_is_not_brought_back(self):
+        changes = self.plan()
+        (self.vault / WEEK).unlink()
+        self.apply(changes)
+        self.assertFalse((self.vault / WEEK).exists())
+        self.assertFalse((self.vault / (WEEK + ".mine")).exists())
+
+    def test_a_note_that_is_gone_when_written_is_not_created(self):
+        # The guard in _write_checked itself, for a note deleted after apply_update built the marked bytes.
+        target = self.vault / WEEK
+        target.unlink()
+        change = install.Change("mark", WEEK, seen=hashlib.sha256(self.before).hexdigest())
+        install._write_checked(target, self.before, change)
+        self.assertFalse(target.exists())
 
 
 class ToolTests(UpdateTestCase):

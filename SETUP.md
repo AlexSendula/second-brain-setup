@@ -65,7 +65,7 @@ Get the newest release of the kit. Never use the `main` branch.
 1. Run `git ls-remote --tags https://github.com/AlexSendula/second-brain-setup`. This only reads the tag list. Skip the lines that end in `^{}`. Take the highest version tag, such as `0.1.0`. Compare the parts as numbers.
 2. Before anything is downloaded, ask the person **Install now?** Name what the install fetches:
    - the kit, release `<tag>`, from https://github.com/AlexSendula/second-brain-setup
-   - Ninja Board's five dashboard notes, from the Ninja Board 1.0.2 release, https://github.com/AlexSendula/ninja-board
+   - Ninja Board's five dashboard notes, from the Ninja Board 1.1.1 release, https://github.com/AlexSendula/ninja-board. Each note carries `cssclasses: ninja-board`, which makes Ninja Board open it as a board page, with its Properties and title hidden.
    - Python 3.14, which uv downloads into its own folder the first time it needs it
 
    Go on only on a yes. If the answer is no, say what is still missing, and stop.

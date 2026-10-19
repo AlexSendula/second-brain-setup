@@ -161,11 +161,24 @@ class KitTextTests(unittest.TestCase):
                 self.assertIn(phrase, text)
         self.assertNotIn("Trust author", text)  # no plugin code in the vault, so Obsidian shows no such dialog
 
+    def test_the_docs_name_the_pinned_ninja_board_release_and_the_kit_version(self):
+        pinned = install.load_pins()["ninja-board-dashboards"]["version"]
+        for rel in ("README.md", "SETUP.md", "skills/brain-setup/SKILL.md"):
+            with self.subTest(file=rel):
+                text = (install.KIT_ROOT / rel).read_text(encoding="utf-8")
+                self.assertIn("cssclasses", text)  # what the class does is said where the release is named
+                found = set(re.findall(r"Ninja Board (\d+\.\d+\.\d+)", text))
+                # The skill names no release, so a pin bump leaves it true. install.py's plan line names 1.1.1 on purpose.
+                self.assertEqual(found, set() if rel.startswith("skills/") else {pinned})
+        readme = (install.KIT_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"This is version {install.kit_version()}.", readme)
+        self.assertIn("gets `cssclasses: ninja-board` added", readme)  # what update does to a dashboard without it
+
     def test_brain_setup_skill_explains_the_update(self):
         text = (install.SKILLS / "brain-setup" / "SKILL.md").read_text(encoding="utf-8")
         for phrase in (
             "add .claude/CLAUDE.md", "remove CLAUDE.md", "hide-agent-files", "CSS snippets", "Check for updates",
-            "SETUP.md` and continue from step 7",
+            "SETUP.md` and continue from step 7", "`mark`", "cssclasses: ninja-board", "board page",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
